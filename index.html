@@ -26,6 +26,7 @@ input[type=number]{-moz-appearance:textfield}
 #loader .msg{margin-top:16px;font-size:13px;color:#8b8b9e;font-family:'Outfit',sans-serif}
 #loader .err{margin-top:16px;font-size:12px;color:#ff6b6b;font-family:'JetBrains Mono',monospace;max-width:90%;text-align:center;word-break:break-all}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 </style>
 </head>
 <body>
@@ -583,6 +584,19 @@ const YTBtn=({yt,size=22})=>yt?(
     {Icons.play({size:size/2.5,color:"#ff4444"})}</a>
 ):null;
 
+// ─── Global Footer ───
+const Footer=()=>(
+  <div style={{textAlign:"center",padding:"20px 0 8px",borderTop:"1px solid rgba(255,255,255,0.03)",marginTop:16}}>
+    <div style={{fontSize:11,fontWeight:700,color:V.text3}}>Created by <span style={{color:V.text2}}>Byheir Wise</span></div>
+    <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:4}}>
+      <a href="https://byheir.com" target="_blank" rel="noopener" style={{fontSize:10,color:V.accent,textDecoration:"none",fontWeight:600}}>Byheir.com</a>
+      <span style={{fontSize:10,color:V.text3}}>·</span>
+      <a href="https://ironlog.space" target="_blank" rel="noopener" style={{fontSize:10,color:V.accent,textDecoration:"none",fontWeight:600}}>Ironlog.space</a>
+    </div>
+    <div style={{fontSize:9,color:V.text3,marginTop:4,opacity:0.6}}>IRONLOG v3 · For updates visit ironlog.space</div>
+  </div>
+);
+
 // ─── Rest Timer ───
 function RestTimer(){
   const [active,setActive]=useState(false);
@@ -912,6 +926,17 @@ function usePRs(workouts,exercises){
   },[workouts,exercises]);
 }
 
+// ─── Find last sets for an exercise (for auto-fill) ───
+function findLastSets(exerciseId,workouts){
+  for(const w of workouts){
+    const ex=w.exercises.find(e=>e.exerciseId===exerciseId);
+    if(ex&&ex.sets.length>0){
+      return ex.sets.map(st=>({weight:st.weight.toString(),reps:st.reps.toString(),rpe:st.rpe?st.rpe.toString():"",done:true}));
+    }
+  }
+  return null;
+}
+
 // ═══════════════════════════════════════
 //  HOME TAB
 // ═══════════════════════════════════════
@@ -1190,32 +1215,76 @@ function WorkoutTab({s,d}){
   const [showTemplates,setShowTemplates]=useState(false);
   const [showPlates,setShowPlates]=useState(false);
   const [newPRs,setNewPRs]=useState([]);
+  const [startTime,setStartTime]=useState(null);
+  const [elapsed,setElapsed]=useState(0);
   const cats=["All",...new Set(s.exercises.map(e=>e.cat))];
   const prs=usePRs(s.workouts,s.exercises);
 
-  const startNew=()=>{setForm({date:today(),dur:"",exercises:[],notes:"",rating:3});setNewPRs([]);setShow(true);};
-  const loadTemplate=(t)=>{
-    setForm(f=>({...f,exercises:t.exs.map(eid=>({exerciseId:eid,sets:[{weight:"",reps:"",rpe:"",done:true}]}))}));
-    setShowTemplates(false);setShow(true);
+  // Live workout timer
+  useEffect(()=>{
+    if(!startTime)return;
+    const iv=setInterval(()=>setElapsed(Math.floor((Date.now()-startTime)/1000)),1000);
+    return()=>clearInterval(iv);
+  },[startTime]);
+
+  const fmtElapsed=(sec)=>{const m=Math.floor(sec/60);const s2=sec%60;return`${m}:${s2<10?"0":""}${s2}`;};
+
+  // Motivational messages
+  const motivations=["Let's get it! 💪","Time to grind!","No excuses today.","Push your limits.","Stronger every rep.",
+    "You showed up — that's half the battle.","Make it count.","Beast mode: ON"];
+  const motiv=useMemo(()=>motivations[Math.floor(Math.random()*motivations.length)],[show]);
+
+  const startNew=()=>{
+    setForm({date:today(),dur:"",exercises:[],notes:"",rating:3});
+    setNewPRs([]);setStartTime(Date.now());setElapsed(0);setShow(true);
   };
 
-  const addEx=()=>{if(!selEx)return;setForm(f=>({...f,exercises:[...f.exercises,{exerciseId:selEx,sets:[{weight:"",reps:"",rpe:"",done:true}]}]}));setSelEx("");};
+  // Start from last workout (repeat) — auto-fills exercises with last weights
+  const repeatLast=()=>{
+    if(s.workouts.length===0)return;
+    const last=s.workouts[0];
+    const exs=last.exercises.map(ex=>({
+      exerciseId:ex.exerciseId,
+      sets:ex.sets.map(st=>({weight:st.weight.toString(),reps:st.reps.toString(),rpe:st.rpe?st.rpe.toString():"",done:true}))
+    }));
+    setForm({date:today(),dur:"",exercises:exs,notes:"",rating:3});
+    setNewPRs([]);setStartTime(Date.now());setElapsed(0);setShow(true);
+  };
+
+  const loadTemplate=(t)=>{
+    // Pre-fill weights from last time each exercise was done
+    const exs=t.exs.map(eid=>{
+      const lastW=findLastSets(eid,s.workouts);
+      return{exerciseId:eid,sets:lastW||[{weight:"",reps:"",rpe:"",done:true}]};
+    });
+    setForm(f=>({...f,exercises:exs}));
+    setShowTemplates(false);setStartTime(Date.now());setElapsed(0);setShow(true);
+  };
+
+  const addEx=()=>{
+    if(!selEx)return;
+    // Auto-fill from last workout
+    const lastW=findLastSets(selEx,s.workouts);
+    setForm(f=>({...f,exercises:[...f.exercises,{exerciseId:selEx,sets:lastW||[{weight:"",reps:"",rpe:"",done:true}]}]}));
+    setSelEx("");
+  };
   const addSet=(ei)=>{setForm(f=>{const exs=[...f.exercises];const l=exs[ei].sets[exs[ei].sets.length-1];exs[ei]={...exs[ei],sets:[...exs[ei].sets,{weight:l.weight,reps:l.reps,rpe:l.rpe,done:true}]};return{...f,exercises:exs};});};
   const updSet=(ei,si,k,v)=>{setForm(f=>{const exs=[...f.exercises],sets=[...exs[ei].sets];sets[si]={...sets[si],[k]:v};exs[ei]={...exs[ei],sets};return{...f,exercises:exs};});};
   const rmSet=(ei,si)=>setForm(f=>{const exs=[...f.exercises];exs[ei]={...exs[ei],sets:exs[ei].sets.filter((_,i)=>i!==si)};return{...f,exercises:exs};});
   const rmEx=(ei)=>setForm(f=>({...f,exercises:f.exercises.filter((_,i)=>i!==ei)}));
 
   const save=()=>{
-    const w={id:uid(),date:form.date,dur:parseInt(form.dur)||0,rating:form.rating,
+    // Auto-fill duration from timer if not manually set
+    const dur=parseInt(form.dur)||Math.round(elapsed/60)||0;
+    const w={id:uid(),date:form.date,dur,rating:form.rating,
       exercises:form.exercises.map(e=>({...e,sets:e.sets.map(st=>({weight:parseFloat(st.weight)||0,reps:parseInt(st.reps)||0,rpe:parseFloat(st.rpe)||0,done:st.done}))})),
       notes:form.notes};
-    // PR detection
     const detected=[];
     w.exercises.forEach(ex=>{
       const name=s.exercises.find(e=>e.id===ex.exerciseId)?.name||ex.exerciseId;
       ex.sets.forEach(st=>{const e1rm=calc1RM(st.weight,st.reps);const prev=prs[ex.exerciseId];
         if(st.weight>0&&(!prev||e1rm>prev.e1rm))detected.push({name,weight:st.weight,reps:st.reps,e1rm});});});
-    setNewPRs(detected);d({type:"ADD_W",w});
+    setNewPRs(detected);d({type:"ADD_W",w});setStartTime(null);
     if(detected.length===0)setShow(false);
   };
 
@@ -1243,9 +1312,12 @@ function WorkoutTab({s,d}){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",gap:8}}>
-        <Btn full onClick={startNew}>{Icons.plus({size:16,color:V.bg})} Log Workout</Btn>
-        <Btn v="secondary" onClick={()=>setShowTemplates(true)} s={{flexShrink:0}}>{Icons.copy({size:14,color:V.text2})}</Btn>
-        <Btn v="secondary" onClick={()=>setShowPlates(true)} s={{flexShrink:0}}>{Icons.hash({size:14,color:V.text2})}</Btn>
+        <Btn full onClick={startNew}>{Icons.plus({size:16,color:V.bg})} New Workout</Btn>
+        {s.workouts.length>0&&<Btn v="secondary" onClick={repeatLast} s={{flexShrink:0,fontSize:11}}>{Icons.refresh({size:14,color:V.text2})} Repeat</Btn>}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <Btn v="secondary" full onClick={()=>setShowTemplates(true)}>{Icons.copy({size:14,color:V.text2})} Templates</Btn>
+        <Btn v="secondary" full onClick={()=>setShowPlates(true)}>{Icons.hash({size:14,color:V.text2})} Plates</Btn>
       </div>
 
       {showTemplates&&(
@@ -1262,7 +1334,19 @@ function WorkoutTab({s,d}){
       {showPlates&&(<Sheet title="Plate Calculator" onClose={()=>setShowPlates(false)}><PlateCalc/></Sheet>)}
 
       {show&&(
-        <Sheet title="Log Workout" onClose={()=>setShow(false)}>
+        <Sheet title="Log Workout" onClose={()=>{setShow(false);setStartTime(null);}}>
+          {/* Live timer + motivation */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,
+            padding:"10px 14px",background:`${V.accent}06`,borderRadius:12,border:`1px solid ${V.accent}12`}}>
+            <div style={{fontSize:11,color:V.text3,fontStyle:"italic"}}>{motiv}</div>
+            {startTime&&(
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:6,height:6,borderRadius:3,background:V.accent,animation:"pulse 2s infinite"}}/>
+                <span style={{fontSize:14,fontWeight:800,color:V.accent,fontFamily:V.mono}}>{fmtElapsed(elapsed)}</span>
+              </div>
+            )}
+          </div>
+
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
             <Field label="Duration" type="number" value={form.dur} onChange={v=>setForm(f=>({...f,dur:v}))} unit="min" placeholder="60"/>
@@ -2287,9 +2371,7 @@ function SettingsTab({s,d}){
         </div>
       </Row>
 
-      <div style={{textAlign:"center",padding:"20px 0 8px"}}>
-        <span style={{fontSize:10,color:V.text3}}>IRONLOG v3 · Built by Bwise</span>
-      </div>
+      <Footer/>
     </div>
   );
 }
@@ -3260,6 +3342,9 @@ function App(){
         {s.tab==="track_muscles"&&<div><SubBack to="track" label="Track"/><MuscleHeatMap s={s}/></div>}
         {s.tab==="track_strength"&&<div><SubBack to="track" label="Track"/><StrengthScoreCard s={s}/></div>}
         {s.tab==="track_onerm"&&<div><SubBack to="track" label="Track"/><OneRMCalc units={s.units}/></div>}
+
+        {/* Global footer on every page */}
+        <Footer/>
       </div>
 
       {/* Bottom Nav — always visible, highlights parent group */}
