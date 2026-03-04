@@ -22,14 +22,35 @@ input[type=number]{-moz-appearance:textfield}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js';"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js';"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js';"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.3/babel.min.js';"></script>
 </head>
 <body>
 <div id="root"></div>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const root=document.getElementById('root');
+  if(root){
+    root.innerHTML='<div style="padding:24px;font-family:Outfit,sans-serif;color:#d1d5db">Loading IRONLOG…</div>';
+  }
+  setTimeout(()=>{
+    if(root && !root.dataset.appMounted){
+      root.innerHTML='<div style="padding:24px;font-family:Outfit,sans-serif;color:#fca5a5;line-height:1.5"><h2 style="margin-bottom:8px;color:#fecaca">IRONLOG failed to load</h2><p>One or more CDN scripts were blocked or failed to download.</p><p style="margin-top:8px">Try refreshing, disabling strict content blockers, or opening with a stronger connection.</p></div>';
+    }
+  },7000);
+});
+</script>
 <script type="text/babel" data-type="module">
+if(!window.React || !window.ReactDOM || !window.Recharts){
+  const root=document.getElementById('root');
+  if(root){
+    root.innerHTML='<div style="padding:24px;font-family:Outfit,sans-serif;color:#fca5a5">Missing required scripts (React / ReactDOM / Recharts).</div>';
+  }
+  throw new Error('Missing required CDN dependencies.');
+}
+
 const {useState,useEffect,useReducer,useMemo,useRef,useCallback}=React;
 const {LineChart,Line,AreaChart,Area,BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,ResponsiveContainer,PieChart,Pie,Cell}=Recharts;
 
@@ -1914,6 +1935,7 @@ function App(){
 
 // ─── Mount ───
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+document.getElementById('root').dataset.appMounted='1';
 </script>
 <script>
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}
