@@ -14,8 +14,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body,#root{height:100%;width:100%;background:#08080d;overflow:hidden}
-body{font-family:'Outfit',sans-serif;color:#e8e8ec;overscroll-behavior:none}
+html,body,#root{height:100%;width:100%;background:#08080d;margin:0;padding:0;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0}
+body{font-family:'Outfit',sans-serif;color:#e8e8ec;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
 input,select,button{font-family:inherit}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 input[type=number]{-moz-appearance:textfield}
@@ -173,6 +173,9 @@ const Icons = {
   moon: (p) => <Icon {...p} d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>,
   pause: (p) => <Icon {...p} d={<><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></>}/>,
   copy: (p) => <Icon {...p} d={<><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></>}/>,
+  scan: (p) => <Icon {...p} d={<><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></>}/>,
+  download: (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>}/>,
+  upload: (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>}/>,
   hash: (p) => <Icon {...p} d={<><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>}/>,
 };
 
@@ -674,6 +677,197 @@ function FoodSearch({onAdd}){
   );
 }
 
+// ─── Barcode Scanner ───
+function BarcodeScanner({onResult,onClose}){
+  const videoRef=useRef(null);
+  const streamRef=useRef(null);
+  const [status,setStatus]=useState("init"); // init, scanning, loading, found, error, unsupported
+  const [product,setProduct]=useState(null);
+  const [manualCode,setManualCode]=useState("");
+  const scanningRef=useRef(false);
+
+  const stopCam=useCallback(()=>{
+    scanningRef.current=false;
+    if(streamRef.current){streamRef.current.getTracks().forEach(t=>t.stop());streamRef.current=null;}
+  },[]);
+
+  const lookupBarcode=useCallback(async(code)=>{
+    setStatus("loading");
+    try{
+      const res=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+      const data=await res.json();
+      if(data.status===1&&data.product){
+        const p=data.product;
+        const n=p.nutriments||{};
+        const name=p.product_name||p.product_name_en||"Unknown Product";
+        const serving=p.serving_quantity||100;
+        const prod={
+          name:name.length>40?name.slice(0,37)+"...":name,
+          brand:p.brands||"",
+          cal:Math.round(n["energy-kcal_serving"]||n["energy-kcal_100g"]||0),
+          protein:Math.round(n.proteins_serving||n.proteins_100g||0),
+          carbs:Math.round(n.carbohydrates_serving||n.carbohydrates_100g||0),
+          fat:Math.round(n.fat_serving||n.fat_100g||0),
+          fiber:Math.round(n.fiber_serving||n.fiber_100g||0),
+          serving:p.serving_size||`${serving}g`,
+          barcode:code,
+          image:p.image_small_url||null,
+        };
+        setProduct(prod);setStatus("found");
+      }else{setStatus("error");}
+    }catch(e){setStatus("error");}
+  },[]);
+
+  const startCam=useCallback(async()=>{
+    if(!navigator.mediaDevices?.getUserMedia){setStatus("unsupported");return;}
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
+      streamRef.current=stream;
+      if(videoRef.current){videoRef.current.srcObject=stream;await videoRef.current.play();}
+      setStatus("scanning");scanningRef.current=true;
+      // Use BarcodeDetector if available
+      if("BarcodeDetector" in window){
+        const detector=new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e","code_128","code_39"]});
+        const scan=async()=>{
+          if(!scanningRef.current||!videoRef.current)return;
+          try{
+            const barcodes=await detector.detect(videoRef.current);
+            if(barcodes.length>0){stopCam();lookupBarcode(barcodes[0].rawValue);return;}
+          }catch(e){}
+          if(scanningRef.current)requestAnimationFrame(scan);
+        };
+        requestAnimationFrame(scan);
+      }else{setStatus("unsupported");}
+    }catch(e){setStatus("unsupported");}
+  },[stopCam,lookupBarcode]);
+
+  useEffect(()=>{startCam();return stopCam;},[startCam,stopCam]);
+
+  const addProduct=()=>{
+    if(product){onResult({name:product.name+(product.brand?` (${product.brand})`:""),cal:product.cal,protein:product.protein,carbs:product.carbs,fat:product.fat});onClose();}
+  };
+
+  const manualLookup=()=>{if(manualCode.trim().length>=8)lookupBarcode(manualCode.trim());};
+
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,0.92)",display:"flex",flexDirection:"column"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",flexShrink:0}}>
+        <button onClick={()=>{stopCam();onClose();}} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:V.accent}}>
+          {Icons.chevLeft({size:18,color:V.accent})}<span style={{fontSize:14,fontWeight:600}}>Back</span>
+        </button>
+        <span style={{fontSize:15,fontWeight:700,color:V.text}}>Scan Barcode</span>
+        <div style={{width:60}}/>
+      </div>
+
+      {/* Camera / Status */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 20px",gap:16}}>
+        {(status==="init"||status==="scanning")&&(
+          <div style={{position:"relative",width:"100%",maxWidth:320,aspectRatio:"4/3",borderRadius:16,overflow:"hidden",border:`2px solid ${V.accent}30`}}>
+            <video ref={videoRef} playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            {/* Scan overlay */}
+            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{width:"70%",height:2,background:V.accent,opacity:0.7,boxShadow:`0 0 20px ${V.accent}`,
+                animation:"scanLine 2s ease-in-out infinite"}}/>
+            </div>
+            <div style={{position:"absolute",inset:0,border:"2px solid transparent",
+              borderImage:`linear-gradient(${V.accent},${V.accent2}) 1`,opacity:0.3}}/>
+          </div>
+        )}
+
+        {status==="scanning"&&(
+          <div style={{fontSize:12,color:V.text3,textAlign:"center"}}>Point camera at barcode</div>
+        )}
+
+        {status==="loading"&&(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+            <div style={{width:40,height:40,borderRadius:20,border:`3px solid ${V.accent}30`,borderTopColor:V.accent,
+              animation:"spin 0.8s linear infinite"}}/>
+            <span style={{fontSize:13,color:V.text3}}>Looking up product...</span>
+          </div>
+        )}
+
+        {status==="found"&&product&&(
+          <div style={{width:"100%",maxWidth:340}}>
+            <Card style={{padding:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                {product.image&&<img src={product.image} alt="" style={{width:48,height:48,borderRadius:10,objectFit:"cover",background:"rgba(255,255,255,0.05)"}}/>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:V.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{product.name}</div>
+                  {product.brand&&<div style={{fontSize:11,color:V.text3}}>{product.brand}</div>}
+                  <div style={{fontSize:10,color:V.text3,marginTop:2}}>Per {product.serving}</div>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                {[{l:"Cal",v:product.cal,c:V.warn},{l:"Protein",v:`${product.protein}g`,c:V.accent},
+                  {l:"Carbs",v:`${product.carbs}g`,c:V.accent2},{l:"Fat",v:`${product.fat}g`,c:V.warn}].map(m=>(
+                  <div key={m.l} style={{textAlign:"center",padding:"8px 4px",background:`${m.c}08`,borderRadius:8}}>
+                    <div style={{fontSize:16,fontWeight:800,color:m.c,fontFamily:V.mono}}>{m.v}</div>
+                    <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",marginTop:2}}>{m.l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <Btn v="secondary" full onClick={()=>{setProduct(null);setStatus("init");startCam();}}>Scan Again</Btn>
+                <Btn full onClick={addProduct}>{Icons.plus({size:14,color:V.bg})} Add</Btn>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {status==="error"&&(
+          <div style={{width:"100%",maxWidth:340}}>
+            <Card style={{padding:16,textAlign:"center"}}>
+              <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+              <div style={{fontSize:14,fontWeight:700,color:V.text,marginBottom:4}}>Product Not Found</div>
+              <div style={{fontSize:12,color:V.text3,marginBottom:12}}>This barcode isn't in the database. Try another product or enter nutrition manually.</div>
+              <Btn v="secondary" full onClick={()=>{setProduct(null);setStatus("init");startCam();}}>Try Again</Btn>
+            </Card>
+          </div>
+        )}
+
+        {status==="unsupported"&&(
+          <div style={{width:"100%",maxWidth:340}}>
+            <Card style={{padding:16}}>
+              <div style={{fontSize:14,fontWeight:700,color:V.text,marginBottom:8,textAlign:"center"}}>Enter Barcode Manually</div>
+              <div style={{fontSize:11,color:V.text3,marginBottom:12,textAlign:"center"}}>Camera scanning unavailable. Type or paste the barcode number.</div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="e.g. 049000042566"
+                  inputMode="numeric" style={{flex:1,padding:"12px 14px",background:"rgba(255,255,255,0.04)",
+                    border:`1px solid ${V.cardBorder}`,borderRadius:12,color:V.text,fontSize:15,fontFamily:V.mono,
+                    outline:"none",boxSizing:"border-box",minHeight:44}}/>
+                <Btn onClick={manualLookup}>{Icons.search({size:16,color:V.bg})}</Btn>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Manual entry fallback always available */}
+      {(status==="scanning"||status==="init")&&(
+        <div style={{padding:"0 20px 24px",flexShrink:0}}>
+          <div style={{display:"flex",gap:8}}>
+            <input value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="Or type barcode..."
+              inputMode="numeric" style={{flex:1,padding:"10px 12px",background:"rgba(255,255,255,0.04)",
+                border:`1px solid ${V.cardBorder}`,borderRadius:10,color:V.text,fontSize:13,fontFamily:V.mono,
+                outline:"none",boxSizing:"border-box",minHeight:40}}/>
+            <button onClick={manualLookup} disabled={manualCode.trim().length<8} style={{padding:"10px 16px",borderRadius:10,border:"none",
+              background:manualCode.trim().length>=8?V.accent:"rgba(255,255,255,0.04)",
+              color:manualCode.trim().length>=8?V.bg:V.text3,fontWeight:700,fontSize:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              Look Up
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes scanLine{0%,100%{transform:translateY(-30px);opacity:0.3}50%{transform:translateY(30px);opacity:0.9}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+      `}</style>
+    </div>
+  );
+}
+
 // ─── Plate Calculator ───
 function PlateCalc(){
   const [w,setW]=useState("");
@@ -830,10 +1024,16 @@ function HomeTab({s,d}){
             <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Weight ({u})</div>
           </div>
           <div style={{width:1,background:V.cardBorder}}/>
-          <div style={{flex:1,textAlign:"center"}}>
-            <div style={{fontSize:16,fontWeight:800,color:V.warn,fontFamily:V.mono}}>{Object.keys(prs).length}</div>
-            <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>PRs</div>
-          </div>
+          {(()=>{
+            const bw2=s.body.find(b=>b.weight)?.weight||s.goals.goalWeight||180;
+            const ss=calcStrengthScore(s.workouts,bw2);
+            return(
+              <div style={{flex:1,textAlign:"center",cursor:"pointer"}} onClick={()=>d({type:"TAB",tab:"track_strength"})}>
+                <div style={{fontSize:16,fontWeight:800,color:ss.rankColor,fontFamily:V.mono}}>{ss.score.toFixed(2)}</div>
+                <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Strength</div>
+              </div>
+            );
+          })()}
         </div>
       </Card>
 
@@ -1101,10 +1301,24 @@ function WorkoutTab({s,d}){
                   <button onClick={()=>rmEx(ei)} style={{background:"none",border:"none",padding:8,cursor:"pointer"}}>{Icons.trash({size:14,color:V.text3})}</button>
                 </div>
                 {(()=>{const sug=getOverloadSuggestion(ex.exerciseId,s.workouts,s.units);return sug?(
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"6px 10px",
-                    background:`${V.accent}08`,borderRadius:8,border:`1px solid ${V.accent}15`}}>
-                    {Icons.zap({size:12,color:V.accent})}
-                    <span style={{fontSize:11,color:V.accent}}>Last: {sug.last} → Try <b>{sug.suggest}</b></span>
+                  <div style={{marginBottom:10,padding:"8px 10px",
+                    background:sug.type==="deload"?`${V.warn}08`:sug.type==="increase"?`${V.accent}08`:`${V.accent2}08`,
+                    borderRadius:8,border:`1px solid ${sug.type==="deload"?V.warn:sug.type==="increase"?V.accent:V.accent2}15`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {Icons.zap({size:12,color:sug.type==="deload"?V.warn:V.accent})}
+                      <span style={{fontSize:11,color:sug.type==="deload"?V.warn:V.accent,fontWeight:700}}>
+                        {sug.type==="increase"?"↑ Increase":sug.type==="deload"?"↓ Deload":sug.type==="repeat"?"→ Repeat":"→ +1 Rep"}
+                      </span>
+                      <span style={{flex:1}}/>
+                      <span style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>E1RM: {sug.e1rm}</span>
+                    </div>
+                    <div style={{fontSize:11,color:V.text2,marginTop:4}}>
+                      Last: <span style={{fontFamily:V.mono}}>{sug.allSets}</span>
+                    </div>
+                    <div style={{fontSize:12,color:V.text,fontWeight:700,marginTop:2,fontFamily:V.mono}}>
+                      → Try {sug.suggest}
+                    </div>
+                    <div style={{fontSize:9,color:V.text3,marginTop:2}}>{sug.reason}</div>
                   </div>
                 ):null;})()}
                 <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 28px",gap:4,marginBottom:6}}>
@@ -1196,6 +1410,7 @@ function NutritionTab({s,d}){
   const [form,setForm]=useState({date:today(),cal:"",protein:"",carbs:"",fat:"",fiber:"",water:"",sleep:"",
     meals:[{name:"Breakfast",items:[]},{name:"Lunch",items:[]},{name:"Dinner",items:[]},{name:"Snacks",items:[]}]});
   const [activeMeal,setActiveMeal]=useState(null);
+  const [scanMeal,setScanMeal]=useState(null);
 
   const start=()=>{
     const ex=s.nutrition.find(n=>n.date===today());
@@ -1269,8 +1484,13 @@ function NutritionTab({s,d}){
               <div key={mi} style={{marginBottom:12,padding:12,background:"rgba(255,255,255,0.02)",borderRadius:14,border:`1px solid ${V.cardBorder}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <span style={{fontSize:13,fontWeight:700,color:V.text}}>{meal.name}</span>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
                     {mCal>0&&<span style={{fontSize:10,color:V.warn,fontFamily:V.mono}}>{mCal}cal · {mP}P</span>}
+                    <button onClick={()=>setScanMeal(mi)}
+                      style={{background:`${V.accent2}15`,border:"none",borderRadius:8,padding:"4px 8px",cursor:"pointer",
+                        display:"flex",alignItems:"center",gap:3,WebkitTapHighlightColor:"transparent"}}>
+                      {Icons.scan({size:12,color:V.accent2})}
+                    </button>
                     <button onClick={()=>setActiveMeal(activeMeal===mi?null:mi)}
                       style={{background:`${V.accent}15`,border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",
                         fontSize:11,color:V.accent,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
@@ -1305,6 +1525,13 @@ function NutritionTab({s,d}){
 
           <Btn full onClick={save} s={{marginTop:12}}>{Icons.check({size:16,color:V.bg})} Save Nutrition</Btn>
         </Sheet>
+      )}
+
+      {scanMeal!==null&&(
+        <BarcodeScanner
+          onResult={(food)=>addFoodToMeal(scanMeal,food)}
+          onClose={()=>setScanMeal(null)}
+        />
       )}
 
       {/* History */}
@@ -2273,49 +2500,571 @@ function ProgressPhotos({s,d}){
 // ─── Export & Import ───
 function DataManager({s,d}){
   const fileRef=useRef(null);
+  const [msg,setMsg]=useState(null);
+  const CURRENT_VERSION=3;
+
   const exportData=()=>{
-    const data={workouts:s.workouts,nutrition:s.nutrition,body:s.body,exercises:s.exercises,
-      goals:s.goals,schedule:s.schedule,units:s.units,photos:s.photos||[]};
+    const data={
+      _ironlog:{version:CURRENT_VERSION,exported:new Date().toISOString(),platform:"IRONLOG v3"},
+      workouts:s.workouts,nutrition:s.nutrition,body:s.body,exercises:s.exercises,
+      goals:s.goals,schedule:s.schedule,units:s.units,photos:s.photos||[]
+    };
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download=`ironlog-backup-${today()}.json`;a.click();
     URL.revokeObjectURL(url);
+    setMsg({type:"success",text:`Exported ${s.workouts.length} workouts, ${s.nutrition.length} nutrition logs, ${s.body.length} measurements`});
+    setTimeout(()=>setMsg(null),4000);
   };
+
   const importData=(e)=>{
     const file=e.target.files?.[0];
     if(!file)return;
     const reader=new FileReader();
     reader.onload=(ev)=>{
       try{
-        const data=JSON.parse(ev.target.result);
-        d({type:"IMPORT",data});
-      }catch(err){alert("Invalid backup file");}
+        const raw=JSON.parse(ev.target.result);
+        // Strip metadata
+        const data={...raw};delete data._ironlog;
+
+        // Smart merge: count what's new vs existing
+        const existingWIds=new Set(s.workouts.map(w=>w.id));
+        const existingNIds=new Set(s.nutrition.map(n=>n.id));
+        const existingBIds=new Set(s.body.map(b=>b.id));
+        const newW=(data.workouts||[]).filter(w=>!existingWIds.has(w.id)).length;
+        const newN=(data.nutrition||[]).filter(n=>!existingNIds.has(n.id)).length;
+        const newB=(data.body||[]).filter(b=>!existingBIds.has(b.id)).length;
+
+        // Merge arrays (keep existing + add new)
+        const merged={
+          ...data,
+          workouts:[...s.workouts,...(data.workouts||[]).filter(w=>!existingWIds.has(w.id))],
+          nutrition:[...s.nutrition,...(data.nutrition||[]).filter(n=>!existingNIds.has(n.id))],
+          body:[...s.body,...(data.body||[]).filter(b=>!existingBIds.has(b.id))],
+          exercises:[...s.exercises,...(data.exercises||[]).filter(e=>!s.exercises.some(x=>x.id===e.id))],
+        };
+
+        d({type:"IMPORT",data:merged});
+        setMsg({type:"success",text:`Imported! +${newW} workouts, +${newN} nutrition, +${newB} measurements`});
+        setTimeout(()=>setMsg(null),5000);
+      }catch(err){
+        setMsg({type:"error",text:"Invalid backup file. Make sure it's an IRONLOG JSON export."});
+        setTimeout(()=>setMsg(null),4000);
+      }
     };
     reader.readAsText(file);
+    e.target.value=""; // reset file input
   };
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <Btn full onClick={exportData}>{Icons.check({size:16,color:V.bg})} Export Backup (JSON)</Btn>
+      {msg&&(
+        <div style={{padding:"10px 14px",borderRadius:10,fontSize:12,fontWeight:600,
+          background:msg.type==="success"?`${V.accent}12`:`${V.danger}12`,
+          color:msg.type==="success"?V.accent:V.danger,
+          border:`1px solid ${msg.type==="success"?V.accent:V.danger}20`}}>
+          {msg.text}
+        </div>
+      )}
+      <div style={{fontSize:11,color:V.text3,marginBottom:2}}>
+        {s.workouts.length} workouts · {s.nutrition.length} nutrition logs · {s.body.length} measurements
+      </div>
+      <Btn full onClick={exportData}>{Icons.download({size:16,color:V.bg})} Export Backup</Btn>
       <input ref={fileRef} type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
-      <Btn v="secondary" full onClick={()=>fileRef.current?.click()}>{Icons.refresh({size:14,color:V.text2})} Import Backup</Btn>
+      <Btn v="secondary" full onClick={()=>fileRef.current?.click()}>{Icons.upload({size:14,color:V.text2})} Import Backup</Btn>
+      <div style={{fontSize:10,color:V.text3,marginTop:2}}>Import merges data — your existing entries won't be duplicated or lost.</div>
     </div>
   );
 }
 
-// ─── Progressive Overload Helper ───
+// ─── Exercise → Muscle Mapping ───
+const MUSCLE_MAP={
+  // Chest
+  bench:{primary:["chest"],secondary:["triceps","front_delts"]},
+  incbench:{primary:["chest"],secondary:["triceps","front_delts"]},
+  decbench:{primary:["chest"],secondary:["triceps"]},
+  dbbench:{primary:["chest"],secondary:["triceps","front_delts"]},
+  dbincbench:{primary:["chest"],secondary:["triceps","front_delts"]},
+  flye:{primary:["chest"],secondary:[]},
+  dbflye:{primary:["chest"],secondary:[]},
+  dip:{primary:["chest"],secondary:["triceps","front_delts"]},
+  pushup:{primary:["chest"],secondary:["triceps","front_delts"]},
+  machpress:{primary:["chest"],secondary:["triceps"]},
+  pecfly:{primary:["chest"],secondary:[]},
+  svbench:{primary:["chest"],secondary:["triceps"]},
+  closegrip:{primary:["triceps"],secondary:["chest"]},
+  // Back
+  deadlift:{primary:["back","hamstrings"],secondary:["glutes","core"]},
+  row:{primary:["back"],secondary:["biceps"]},
+  pullup:{primary:["back"],secondary:["biceps"]},
+  latpull:{primary:["back"],secondary:["biceps"]},
+  chinup:{primary:["back","biceps"],secondary:[]},
+  cablerow:{primary:["back"],secondary:["biceps"]},
+  dbrow:{primary:["back"],secondary:["biceps"]},
+  tbarrow:{primary:["back"],secondary:["biceps"]},
+  pendlay:{primary:["back"],secondary:["biceps"]},
+  sumo:{primary:["back","glutes"],secondary:["hamstrings","quads"]},
+  rdl:{primary:["hamstrings"],secondary:["back","glutes"]},
+  hyperext:{primary:["back"],secondary:["hamstrings","glutes"]},
+  straightarm:{primary:["back"],secondary:[]},
+  meadows:{primary:["back"],secondary:["biceps"]},
+  // Legs
+  squat:{primary:["quads"],secondary:["glutes","hamstrings","core"]},
+  legpress:{primary:["quads"],secondary:["glutes"]},
+  lunge:{primary:["quads"],secondary:["glutes","hamstrings"]},
+  frontsquat:{primary:["quads"],secondary:["core","glutes"]},
+  bss:{primary:["quads"],secondary:["glutes"]},
+  goblet:{primary:["quads"],secondary:["glutes","core"]},
+  legext:{primary:["quads"],secondary:[]},
+  hamcurl:{primary:["hamstrings"],secondary:[]},
+  calfraise:{primary:["calves"],secondary:[]},
+  hacksquat:{primary:["quads"],secondary:["glutes"]},
+  stepup:{primary:["quads"],secondary:["glutes"]},
+  hipthrust:{primary:["glutes"],secondary:["hamstrings"]},
+  legcurl:{primary:["hamstrings"],secondary:[]},
+  sldl:{primary:["hamstrings"],secondary:["back","glutes"]},
+  sissy:{primary:["quads"],secondary:[]},
+  // Shoulders
+  ohp:{primary:["front_delts"],secondary:["triceps"]},
+  dbohp:{primary:["front_delts"],secondary:["triceps"]},
+  lateralraise:{primary:["side_delts"],secondary:[]},
+  facepull:{primary:["rear_delts"],secondary:["back"]},
+  shrug:{primary:["traps"],secondary:[]},
+  reardelt:{primary:["rear_delts"],secondary:[]},
+  arnoldpress:{primary:["front_delts","side_delts"],secondary:["triceps"]},
+  uprow:{primary:["side_delts","traps"],secondary:[]},
+  cablateral:{primary:["side_delts"],secondary:[]},
+  landmine:{primary:["front_delts"],secondary:["triceps","core"]},
+  dbshrug:{primary:["traps"],secondary:[]},
+  frontraise:{primary:["front_delts"],secondary:[]},
+  // Arms
+  curl:{primary:["biceps"],secondary:[]},
+  tricep:{primary:["triceps"],secondary:[]},
+  hammercurl:{primary:["biceps"],secondary:[]},
+  preacher:{primary:["biceps"],secondary:[]},
+  skullcrusher:{primary:["triceps"],secondary:[]},
+  ohtriext:{primary:["triceps"],secondary:[]},
+  concurl:{primary:["biceps"],secondary:[]},
+  cablecurl:{primary:["biceps"],secondary:[]},
+  tridip:{primary:["triceps"],secondary:[]},
+  revbarbell:{primary:["biceps"],secondary:[]},
+  bayesian:{primary:["biceps"],secondary:[]},
+  kickback:{primary:["triceps"],secondary:[]},
+  spidercurl:{primary:["biceps"],secondary:[]},
+  // Core
+  plank:{primary:["core"],secondary:[]},
+  crunch:{primary:["core"],secondary:[]},
+  hangleg:{primary:["core"],secondary:[]},
+  cablecrunch:{primary:["core"],secondary:[]},
+  russiantwist:{primary:["core"],secondary:[]},
+  abwheel:{primary:["core"],secondary:[]},
+  woodchop:{primary:["core"],secondary:[]},
+  deadbug:{primary:["core"],secondary:[]},
+  pallof:{primary:["core"],secondary:[]},
+  decline_sit:{primary:["core"],secondary:[]},
+};
+
+// All muscle groups for heat map
+const ALL_MUSCLES=["chest","back","front_delts","side_delts","rear_delts","traps","biceps","triceps","quads","hamstrings","glutes","calves","core"];
+const MUSCLE_LABELS={chest:"Chest",back:"Back",front_delts:"Front Delts",side_delts:"Side Delts",rear_delts:"Rear Delts",traps:"Traps",biceps:"Biceps",triceps:"Triceps",quads:"Quads",hamstrings:"Hamstrings",glutes:"Glutes",calves:"Calves",core:"Core"};
+
+// ─── Progressive Overload Engine (Enhanced) ───
 function getOverloadSuggestion(exerciseId, workouts, units){
+  // Find last 3 sessions with this exercise
+  const sessions=[];
   for(const w of workouts){
     const ex=w.exercises.find(e=>e.exerciseId===exerciseId);
-    if(ex){
-      const best=ex.sets.reduce((m,st)=>st.weight>m.weight?st:m,{weight:0,reps:0});
-      if(best.weight>0){
-        const inc=units==="kg"?2.5:5;
-        if(best.reps>=8) return{type:"weight",last:`${best.weight}×${best.reps}`,suggest:`${best.weight+inc}×${best.reps}`,date:w.date};
-        if(best.reps<8) return{type:"reps",last:`${best.weight}×${best.reps}`,suggest:`${best.weight}×${best.reps+1}`,date:w.date};
-      }
-    }
+    if(ex&&ex.sets.some(s=>s.weight>0)){sessions.push({date:w.date,sets:ex.sets});if(sessions.length>=3)break;}
   }
-  return null;
+  if(sessions.length===0)return null;
+
+  const latest=sessions[0];
+  const bestSet=latest.sets.reduce((m,st)=>parseFloat(st.weight)>parseFloat(m.weight)?st:m,{weight:0,reps:0});
+  const w=parseFloat(bestSet.weight)||0;
+  const r=parseInt(bestSet.reps)||0;
+  if(w===0)return null;
+
+  const e1rm=Math.round(w*(1+r/30));
+  const inc=units==="kg"?2.5:5;
+  const targetReps=8;
+
+  // Check if all sets hit target reps
+  const allSetsHit=latest.sets.every(st=>parseInt(st.reps)>=targetReps);
+  // Check for failure pattern (last 2-3 sessions struggling)
+  const failCount=sessions.filter(sess=>{
+    const bst=sess.sets.reduce((m,st)=>parseFloat(st.weight)>parseFloat(m.weight)?st:m,{weight:0,reps:0});
+    return parseInt(bst.reps)<targetReps-2;
+  }).length;
+
+  let type,sugWeight,sugReps,reason;
+  if(failCount>=2){
+    // Deload
+    sugWeight=Math.round((w-inc*2)/inc)*inc;
+    sugReps=targetReps;
+    type="deload";
+    reason="Struggling multiple sessions — deload to rebuild";
+  }else if(allSetsHit){
+    // Increase weight
+    sugWeight=w+inc;
+    sugReps=r;
+    type="increase";
+    reason="All sets completed — increase weight";
+  }else if(r<targetReps-1){
+    // Keep same, failed reps
+    sugWeight=w;
+    sugReps=targetReps;
+    type="repeat";
+    reason="Missed reps — repeat and aim higher";
+  }else{
+    // Keep same, almost there
+    sugWeight=w;
+    sugReps=r+1;
+    type="reps";
+    reason="Close to target — add a rep";
+  }
+
+  const zone80=Math.round(e1rm*0.80);
+  const zone70=Math.round(e1rm*0.70);
+
+  return{type,last:`${w}×${r}`,suggest:`${sugWeight}×${sugReps}`,e1rm,zone80,zone70,reason,
+    allSets:latest.sets.map(st=>`${st.weight}×${st.reps}`).join("  "),date:sessions[0].date};
+}
+
+// ─── Muscle Heat Map Calculator ───
+function calcMuscleHeat(workouts,exercises,days=10){
+  const now=new Date();
+  const scores={};
+  ALL_MUSCLES.forEach(m=>{scores[m]=0;});
+
+  workouts.forEach(w=>{
+    const daysAgo=Math.max(0,(now-new Date(w.date))/(1000*60*60*24));
+    if(daysAgo>days)return;
+    const decay=Math.max(0,1-daysAgo/days);
+
+    w.exercises.forEach(ex=>{
+      const map=MUSCLE_MAP[ex.exerciseId];
+      if(!map)return;
+      const setCount=ex.sets.length;
+      const volume=ex.sets.reduce((s,st)=>(parseFloat(st.weight)||0)*(parseInt(st.reps)||0)+s,0);
+      const intensity=Math.min(1,volume/5000)+setCount*0.3;
+
+      map.primary.forEach(m=>{scores[m]+=(intensity*3)*decay;});
+      map.secondary.forEach(m=>{scores[m]+=(intensity*1.5)*decay;});
+    });
+  });
+
+  // Normalize 0-10
+  const mx=Math.max(...Object.values(scores),1);
+  const norm={};
+  ALL_MUSCLES.forEach(m=>{norm[m]=Math.min(10,Math.round(scores[m]/mx*10*10)/10);});
+  return norm;
+}
+
+function getMuscleColor(score){
+  if(score<=0.5)return"rgba(255,255,255,0.06)";
+  if(score<=3)return"rgba(250,204,21,0.4)";   // yellow
+  if(score<=6)return"rgba(0,245,160,0.5)";     // green
+  if(score<=8)return"rgba(0,245,160,0.8)";     // bright green
+  return"rgba(255,107,107,0.7)";                // red (high fatigue)
+}
+
+function getMuscleLabel(score){
+  if(score<=0.5)return"Untrained";
+  if(score<=3)return"Light";
+  if(score<=6)return"Moderate";
+  if(score<=8)return"Well Trained";
+  return"High Volume";
+}
+
+// ─── Muscle Heat Map SVG Component ───
+function MuscleHeatMap({s}){
+  const heat=useMemo(()=>calcMuscleHeat(s.workouts,s.exercises),[s.workouts,s.exercises]);
+  const [sel,setSel]=useState(null);
+
+  // Detect imbalances
+  const imbalances=useMemo(()=>{
+    const msgs=[];
+    const pairs=[
+      ["quads","hamstrings","quad-to-hamstring"],
+      ["chest","back","chest-to-back"],
+      ["biceps","triceps","bicep-to-tricep"],
+      ["front_delts","rear_delts","front-to-rear delt"],
+    ];
+    pairs.forEach(([a,b,label])=>{
+      if(heat[a]>0&&heat[b]<=0.5)msgs.push({msg:`${MUSCLE_LABELS[a]} trained but ${MUSCLE_LABELS[b]} neglected`,fix:b});
+      else if(heat[a]>heat[b]*2.5&&heat[b]>0)msgs.push({msg:`${label} imbalance detected`,fix:b});
+    });
+    if(heat.calves<=0.5&&heat.quads>3)msgs.push({msg:"Calves untrained — add calf raises",fix:"calves"});
+    if(heat.core<=0.5&&s.workouts.length>3)msgs.push({msg:"Core neglected — add ab work",fix:"core"});
+    return msgs;
+  },[heat,s.workouts.length]);
+
+  // Simplified body layout with front + back
+  const MuscleBox=({id,label,w,h,x,y})=>{
+    const score=heat[id]||0;
+    return(
+      <g onClick={()=>setSel(sel===id?null:id)} style={{cursor:"pointer"}}>
+        <rect x={x} y={y} width={w||40} height={h||24} rx={6} fill={getMuscleColor(score)}
+          stroke={sel===id?V.accent:"rgba(255,255,255,0.08)"} strokeWidth={sel===id?2:1}/>
+        <text x={x+(w||40)/2} y={y+(h||24)/2+1} textAnchor="middle" dominantBaseline="central"
+          fill={score>3?"#fff":"rgba(255,255,255,0.5)"} fontSize={8} fontWeight={600} fontFamily={V.font}>{label}</text>
+        {score>0.5&&<text x={x+(w||40)-3} y={y+8} textAnchor="end" fill="rgba(255,255,255,0.6)"
+          fontSize={6} fontFamily={V.mono}>{score.toFixed(0)}</text>}
+      </g>
+    );
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <Card style={{padding:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <span style={{fontSize:14,fontWeight:700,color:V.text}}>Muscle Activity</span>
+          <span style={{fontSize:10,color:V.text3}}>Last 10 days</span>
+        </div>
+
+        {/* Body diagram - front + back side by side */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div>
+            <div style={{fontSize:9,color:V.text3,textAlign:"center",marginBottom:4,fontWeight:600}}>FRONT</div>
+            <svg viewBox="0 0 120 200" style={{width:"100%"}}>
+              <MuscleBox id="traps" label="Traps" x={30} y={2} w={60} h={20}/>
+              <MuscleBox id="front_delts" label="F.Delt" x={4} y={26} w={40} h={22}/>
+              <MuscleBox id="front_delts" label="F.Delt" x={76} y={26} w={40} h={22}/>
+              <MuscleBox id="chest" label="Chest" x={20} y={30} w={80} h={30}/>
+              <MuscleBox id="biceps" label="Bi" x={2} y={64} w={30} h={30}/>
+              <MuscleBox id="biceps" label="Bi" x={88} y={64} w={30} h={30}/>
+              <MuscleBox id="core" label="Core" x={28} y={64} w={64} h={34}/>
+              <MuscleBox id="quads" label="Quads" x={18} y={108} w={38} h={48}/>
+              <MuscleBox id="quads" label="Quads" x={64} y={108} w={38} h={48}/>
+              <MuscleBox id="calves" label="Calf" x={22} y={162} w={30} h={32}/>
+              <MuscleBox id="calves" label="Calf" x={68} y={162} w={30} h={32}/>
+            </svg>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:V.text3,textAlign:"center",marginBottom:4,fontWeight:600}}>BACK</div>
+            <svg viewBox="0 0 120 200" style={{width:"100%"}}>
+              <MuscleBox id="traps" label="Traps" x={30} y={2} w={60} h={20}/>
+              <MuscleBox id="rear_delts" label="R.Delt" x={4} y={26} w={40} h={22}/>
+              <MuscleBox id="rear_delts" label="R.Delt" x={76} y={26} w={40} h={22}/>
+              <MuscleBox id="back" label="Back" x={20} y={30} w={80} h={34}/>
+              <MuscleBox id="triceps" label="Tri" x={2} y={64} w={30} h={30}/>
+              <MuscleBox id="triceps" label="Tri" x={88} y={64} w={30} h={30}/>
+              <MuscleBox id="side_delts" label="S.Delt" x={28} y={66} w={64} h={14}/>
+              <MuscleBox id="glutes" label="Glutes" x={24} y={84} w={72} h={28}/>
+              <MuscleBox id="hamstrings" label="Hams" x={18} y={118} w={38} h={44}/>
+              <MuscleBox id="hamstrings" label="Hams" x={64} y={118} w={38} h={44}/>
+              <MuscleBox id="calves" label="Calf" x={22} y={168} w={30} h={28}/>
+              <MuscleBox id="calves" label="Calf" x={68} y={168} w={30} h={28}/>
+            </svg>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:8}}>
+          {[{l:"None",c:"rgba(255,255,255,0.06)"},{l:"Light",c:"rgba(250,204,21,0.4)"},{l:"Mod",c:"rgba(0,245,160,0.5)"},{l:"High",c:"rgba(255,107,107,0.7)"}].map(x=>(
+            <div key={x.l} style={{display:"flex",alignItems:"center",gap:3}}>
+              <div style={{width:10,height:10,borderRadius:3,background:x.c}}/>
+              <span style={{fontSize:8,color:V.text3}}>{x.l}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Selected muscle detail */}
+        {sel&&(
+          <div style={{marginTop:10,padding:"8px 10px",background:"rgba(255,255,255,0.03)",borderRadius:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:V.text}}>{MUSCLE_LABELS[sel]}</div>
+            <div style={{fontSize:11,color:V.text3}}>Score: {(heat[sel]||0).toFixed(1)}/10 — {getMuscleLabel(heat[sel]||0)}</div>
+          </div>
+        )}
+      </Card>
+
+      {/* Muscle scores list */}
+      <Card style={{padding:12}}>
+        <span style={{fontSize:12,color:V.text3,fontWeight:600,display:"block",marginBottom:8}}>All Muscle Groups</span>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+          {ALL_MUSCLES.sort((a,b)=>(heat[b]||0)-(heat[a]||0)).map(m=>(
+            <div key={m} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
+              background:"rgba(255,255,255,0.02)",borderRadius:6}}>
+              <div style={{width:8,height:8,borderRadius:2,background:getMuscleColor(heat[m]),flexShrink:0}}/>
+              <span style={{fontSize:10,color:V.text,flex:1}}>{MUSCLE_LABELS[m]}</span>
+              <span style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>{(heat[m]||0).toFixed(1)}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Imbalance Alerts */}
+      {imbalances.length>0&&(
+        <Card style={{padding:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8}}>
+            {Icons.zap({size:13,color:V.warn})}
+            <span style={{fontSize:12,color:V.warn,fontWeight:700}}>Imbalance Alerts</span>
+          </div>
+          {imbalances.map((im,i)=>(
+            <div key={i} style={{fontSize:11,color:V.text2,padding:"6px 0",borderBottom:i<imbalances.length-1?"1px solid rgba(255,255,255,0.03)":"none"}}>
+              {im.msg}
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Strength Score System ───
+function calcStrengthScore(workouts,bodyWeight){
+  const bw=parseFloat(bodyWeight)||180;
+  const lifts={bench:0,squat:0,deadlift:0};
+
+  // Find best e1RM for each lift
+  workouts.forEach(w=>{
+    w.exercises.forEach(ex=>{
+      if(lifts.hasOwnProperty(ex.exerciseId)){
+        ex.sets.forEach(st=>{
+          const wt=parseFloat(st.weight)||0;
+          const rp=parseInt(st.reps)||0;
+          if(wt>0&&rp>0){
+            const e1rm=Math.round(wt*(1+rp/30));
+            lifts[ex.exerciseId]=Math.max(lifts[ex.exerciseId],e1rm);
+          }
+        });
+      }
+    });
+  });
+
+  const benchRatio=lifts.bench/bw;
+  const squatRatio=lifts.squat/bw;
+  const deadRatio=lifts.deadlift/bw;
+  const score=benchRatio*0.30+squatRatio*0.35+deadRatio*0.35;
+
+  let rank,rankColor;
+  if(score<0.5){rank="Novice";rankColor=V.text3;}
+  else if(score<1.0){rank="Beginner";rankColor=V.warn;}
+  else if(score<1.5){rank="Intermediate";rankColor=V.accent2;}
+  else if(score<2.0){rank="Advanced";rankColor=V.accent;}
+  else{rank="Elite";rankColor=V.purple;}
+
+  // Badges
+  const badges=[];
+  if(benchRatio>=1.5)badges.push({label:"Bench 1.5x BW",icon:"🏋️"});
+  if(benchRatio>=2.0)badges.push({label:"Bench 2x BW",icon:"💎"});
+  if(squatRatio>=2.0)badges.push({label:"Squat 2x BW",icon:"🦵"});
+  if(squatRatio>=2.5)badges.push({label:"Squat 2.5x BW",icon:"👑"});
+  if(deadRatio>=2.5)badges.push({label:"Dead 2.5x BW",icon:"🔥"});
+  if(deadRatio>=3.0)badges.push({label:"Dead 3x BW",icon:"⚡"});
+  if(score>=1.0)badges.push({label:"1000lb Club",icon:"🏆",cond:lifts.bench+lifts.squat+lifts.deadlift>=1000});
+
+  return{score:Math.round(score*100)/100,rank,rankColor,lifts,benchRatio:Math.round(benchRatio*100)/100,
+    squatRatio:Math.round(squatRatio*100)/100,deadRatio:Math.round(deadRatio*100)/100,
+    badges:badges.filter(b=>b.cond===undefined||b.cond),total:lifts.bench+lifts.squat+lifts.deadlift,bw};
+}
+
+function StrengthScoreCard({s}){
+  const bw=s.body.find(b=>b.weight)?.weight||s.goals.goalWeight||180;
+  const data=useMemo(()=>calcStrengthScore(s.workouts,bw),[s.workouts,bw]);
+  const u=wUnit(s.units);
+
+  // Monthly trend
+  const trend=useMemo(()=>{
+    const months={};
+    s.workouts.forEach(w=>{
+      const mo=w.date.slice(0,7);
+      if(!months[mo])months[mo]=[];
+      months[mo].push(w);
+    });
+    return Object.entries(months).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([mo,wks])=>{
+      const sc=calcStrengthScore(wks,bw);
+      return{date:mo.slice(5),score:sc.score};
+    });
+  },[s.workouts,bw]);
+
+  // Score ring
+  const pct=Math.min(100,data.score/2.5*100);
+  const r=44,circ=2*Math.PI*r,offset=circ*(1-pct/100);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {/* Main Score */}
+      <Card style={{padding:16,textAlign:"center"}}>
+        <svg width={100} height={100} style={{display:"block",margin:"0 auto 8px"}}>
+          <circle cx={50} cy={50} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={6}/>
+          <circle cx={50} cy={50} r={r} fill="none" stroke={data.rankColor} strokeWidth={6}
+            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+            transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1s ease"}}/>
+          <text x={50} y={44} textAnchor="middle" fill={V.text} fontSize={22} fontWeight={800} fontFamily={V.mono}>{data.score.toFixed(2)}</text>
+          <text x={50} y={62} textAnchor="middle" fill={data.rankColor} fontSize={10} fontWeight={700}>{data.rank}</text>
+        </svg>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:4}}>
+          {[{l:"Bench",v:data.lifts.bench,r:data.benchRatio,c:V.accent},
+            {l:"Squat",v:data.lifts.squat,r:data.squatRatio,c:V.accent2},
+            {l:"Dead",v:data.lifts.deadlift,r:data.deadRatio,c:V.purple}].map(x=>(
+            <div key={x.l} style={{padding:"8px 4px",background:`${x.c}08`,borderRadius:8}}>
+              <div style={{fontSize:16,fontWeight:800,color:x.c,fontFamily:V.mono}}>{x.v||"--"}</div>
+              <div style={{fontSize:8,color:V.text3,textTransform:"uppercase",marginTop:1}}>{x.l} E1RM</div>
+              <div style={{fontSize:10,color:x.c,fontFamily:V.mono,marginTop:2}}>{x.r}x BW</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:10}}>
+          <span style={{fontSize:11,color:V.text3}}>Total: <span style={{color:V.text,fontWeight:700,fontFamily:V.mono}}>{data.total} {u}</span></span>
+          <span style={{fontSize:11,color:V.text3}}>BW: <span style={{color:V.text,fontWeight:700,fontFamily:V.mono}}>{bw} {u}</span></span>
+        </div>
+      </Card>
+
+      {/* Rank Scale */}
+      <Card style={{padding:12}}>
+        <span style={{fontSize:12,color:V.text3,fontWeight:600,display:"block",marginBottom:8}}>Rank Scale</span>
+        <div style={{display:"flex",gap:4,marginBottom:4}}>
+          {[{l:"Novice",min:0,max:0.5,c:V.text3},{l:"Beginner",min:0.5,max:1.0,c:V.warn},
+            {l:"Inter",min:1.0,max:1.5,c:V.accent2},{l:"Advanced",min:1.5,max:2.0,c:V.accent},
+            {l:"Elite",min:2.0,max:2.5,c:V.purple}].map(tier=>(
+            <div key={tier.l} style={{flex:1,textAlign:"center"}}>
+              <div style={{height:6,borderRadius:3,marginBottom:4,
+                background:data.score>=tier.min?tier.c:"rgba(255,255,255,0.04)"}}/>
+              <span style={{fontSize:7,color:data.score>=tier.min?tier.c:V.text3,fontWeight:600}}>{tier.l}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Badges */}
+      {data.badges.length>0&&(
+        <Card style={{padding:12}}>
+          <span style={{fontSize:12,color:V.text3,fontWeight:600,display:"block",marginBottom:8}}>Badges Earned</span>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {data.badges.map((b,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",
+                background:`${V.accent}10`,borderRadius:8,border:`1px solid ${V.accent}20`}}>
+                <span>{b.icon}</span>
+                <span style={{fontSize:10,color:V.accent,fontWeight:600}}>{b.label}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Trend */}
+      {trend.length>1&&(
+        <Card style={{padding:12}}>
+          <span style={{fontSize:12,color:V.text3,fontWeight:600,display:"block",marginBottom:8}}>Score Trend</span>
+          <ResponsiveContainer width="100%" height={100}>
+            <AreaChart data={trend}>
+              <defs><linearGradient id="ssGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={V.accent} stopOpacity={0.2}/>
+                <stop offset="100%" stopColor={V.accent} stopOpacity={0}/>
+              </linearGradient></defs>
+              <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+              <YAxis {...chartCfg.axis} width={26} domain={[0,'dataMax+0.3']}/>
+              <Tooltip {...chartCfg.tip}/>
+              <Area type="monotone" dataKey="score" stroke={V.accent} strokeWidth={2} fill="url(#ssGrad)"/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 // ─── Log Hub: Central action screen ───
@@ -2366,6 +3115,8 @@ function TrackHub({s,d}){
         {id:"track_body",icon:Icons.scale,label:"Body Progress",desc:"Weight, measurements & charts",color:V.accent2},
         {id:"track_photos",icon:Icons.target,label:"Progress Photos",desc:"Visual body transformation tracking",color:"#e879f9"},
         {id:"track_analytics",icon:Icons.chart,label:"Analytics",desc:"Progression, volume & frequency",color:V.purple},
+        {id:"track_muscles",icon:Icons.activity,label:"Muscle Heat Map",desc:"See which muscles need work",color:"#f97316"},
+        {id:"track_strength",icon:Icons.trophy,label:"Strength Score",desc:"Your overall strength rating",color:"#a855f7"},
         {id:"track_onerm",icon:Icons.zap,label:"1RM Calculator",desc:"Estimate your one-rep max",color:V.warn},
       ].map(item=>(
         <button key={item.id} onClick={()=>d({type:"TAB",tab:item.id})} style={{
@@ -2390,6 +3141,12 @@ function TrackHub({s,d}){
 
 function App(){
   const [s,d]=useReducer(reducer,init);
+  const contentRef=useRef(null);
+
+  // Scroll to top when tab changes
+  useEffect(()=>{
+    if(contentRef.current)contentRef.current.scrollTop=0;
+  },[s.tab]);
 
   useEffect(()=>{
     (async()=>{
@@ -2449,8 +3206,8 @@ function App(){
 
   return(
     <div style={{
-      minHeight:"100vh",maxWidth:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
-      display:"flex",flexDirection:"column",position:"relative",overflow:"hidden",
+      height:"100%",maxWidth:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
+      display:"flex",flexDirection:"column",position:"relative",
     }}>
 
       {/* Status Bar Area */}
@@ -2479,8 +3236,10 @@ function App(){
         </div>
       </div>
 
-      {/* Content */}
-      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"0 16px 16px"}}>
+      {/* Content — scrollable region */}
+      <div ref={contentRef} style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",
+        WebkitOverflowScrolling:"touch",padding:"0 16px 24px",
+        overscrollBehavior:"contain"}}>
         {s.tab==="home"&&<HomeTab s={s} d={d}/>}
         {s.tab==="log"&&<LogHub s={s} d={d}/>}
         {s.tab==="track"&&<TrackHub s={s} d={d}/>}
@@ -2498,6 +3257,8 @@ function App(){
         {s.tab==="track_body"&&<div><SubBack to="track" label="Track"/><BodyTab s={s} d={d}/></div>}
         {s.tab==="track_photos"&&<div><SubBack to="track" label="Track"/><ProgressPhotos s={s} d={d}/></div>}
         {s.tab==="track_analytics"&&<div><SubBack to="track" label="Track"/><AnalyticsTab s={s} d={d}/></div>}
+        {s.tab==="track_muscles"&&<div><SubBack to="track" label="Track"/><MuscleHeatMap s={s}/></div>}
+        {s.tab==="track_strength"&&<div><SubBack to="track" label="Track"/><StrengthScoreCard s={s}/></div>}
         {s.tab==="track_onerm"&&<div><SubBack to="track" label="Track"/><OneRMCalc units={s.units}/></div>}
       </div>
 
