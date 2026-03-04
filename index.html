@@ -6152,8 +6152,7 @@ function App(){
         if(existing){LS.set("ft-push-subscribed",true);return;}
 
         // Subscribe with VAPID key (you'll set this up)
-        const vapidKey=LS.get("ft-vapid-public");
-        if(!vapidKey)return; // No VAPID key configured yet
+        const vapidKey="BMZyIUQO08nuR7afvqNIWBK_ZOcr7PHwT2YwIxTa_ONwAD1YCaJ8Qkb4q4TTYSx_sTN-7-5vCzR8ApNZuyg-Ttc";
 
         const sub=await reg.pushManager.subscribe({
           userVisibleOnly:true,
