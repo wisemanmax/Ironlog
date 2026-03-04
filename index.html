@@ -520,13 +520,19 @@ const Sheet = ({title,onClose,children}) => (
     <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.65)",backdropFilter:"blur(6px)"}} onClick={onClose}/>
     <div style={{position:"relative",background:"linear-gradient(180deg,#1a1a28,#0e0e16)",borderRadius:"20px 20px 0 0",
       maxHeight:"92vh",display:"flex",flexDirection:"column",paddingBottom:"env(safe-area-inset-bottom, 20px)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",
+      {/* Drag handle */}
+      <div style={{display:"flex",justifyContent:"center",paddingTop:10,paddingBottom:4}}>
+        <div style={{width:36,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)"}}/>
+      </div>
+      {/* Header with back button */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 16px 12px",
         borderBottom:`1px solid ${V.cardBorder}`}}>
-        <h3 style={{margin:0,fontSize:17,color:V.text,fontFamily:V.font,fontWeight:700}}>{title}</h3>
-        <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,
-          width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-          {Icons.x({size:16,color:V.text2})}
+        <button onClick={onClose} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",
+          cursor:"pointer",padding:"8px 4px",WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+          {Icons.chevLeft({size:20,color:V.accent})}
+          <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span>
         </button>
+        <h3 style={{margin:0,fontSize:16,color:V.text,fontFamily:V.font,fontWeight:700,flex:1,textAlign:"center",paddingRight:50}}>{title}</h3>
       </div>
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:20}}>{children}</div>
     </div>
@@ -720,10 +726,23 @@ function HomeTab({s,d}){
   const streak=useStreak(s.workouts);
   const prs=usePRs(s.workouts,s.exercises);
   const tn=s.nutrition.find(n=>n.date===td);
+  const todayW=s.workouts.find(w=>w.date===td);
   const ww=s.workouts.filter(w=>w.date>=ago(7)).length;
   const vol=s.workouts.filter(w=>w.date>=ago(7)).reduce((sum,w)=>sum+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
   const dow=new Date().getDay();
   const todayType=s.schedule.overrides[td]||s.schedule.weekly[dow]||"Rest";
+  const u=wUnit(s.units);
+  const hr=new Date().getHours();
+  const greeting=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening";
+  const latestBW=s.body.find(b=>b.weight)?.weight;
+
+  // Weekly dots
+  const weekDays=["S","M","T","W","T","F","S"];
+  const last7=Array.from({length:7}).map((_,i)=>{
+    const d2=new Date();d2.setDate(d2.getDate()-6+i);
+    const ds=d2.toISOString().slice(0,10);
+    return{day:weekDays[d2.getDay()],active:s.workouts.some(w=>w.date===ds),isToday:ds===td};
+  });
 
   const strengthData=useMemo(()=>{
     const map={};
@@ -739,158 +758,223 @@ function HomeTab({s,d}){
     return Object.values(map);
   },[s.workouts,s.range]);
 
-  const calData=useMemo(()=>
-    s.nutrition.filter(n=>n.date>=ago(s.range)).sort((a,b)=>a.date.localeCompare(b.date))
-      .map(n=>({date:fmtShort(n.date),cal:n.cal,target:s.goals.cal}))
-  ,[s.nutrition,s.range,s.goals.cal]);
-
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
-      {/* Today's Plan + Streak */}
-      <Card glow={todayType!=="Rest"} style={{padding:14}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <div style={{fontSize:10,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em"}}>Today's Plan</div>
-            <div style={{fontSize:20,fontWeight:800,color:WORKOUT_TYPES_COLORS[todayType]||V.text,marginTop:2}}>{todayType}</div>
-          </div>
-          {streak>0&&(
-            <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:10,background:"rgba(255,159,67,0.12)"}}>
-              {Icons.flame({size:14,color:V.warn})}
-              <span style={{fontSize:14,fontWeight:800,color:V.warn,fontFamily:V.mono}}>{streak}</span>
-              <span style={{fontSize:9,color:V.warn}}>day{streak>1?"s":""}</span>
-            </div>
-          )}
-        </div>
-      </Card>
+    <div style={{display:"flex",flexDirection:"column",gap:10,paddingBottom:4}}>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <Stat icon={Icons.dumbbell} label="This Week" value={ww} unit="sessions" color={V.accent}/>
-        <Stat icon={Icons.zap} label="Volume" value={vol>1000?`${(vol/1000).toFixed(1)}k`:vol} unit="lbs" color={V.accent2}/>
+      {/* Hero: Greeting + Today + Streak */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:12,color:V.text3}}>{greeting}</div>
+          <div style={{fontSize:20,fontWeight:800,color:V.text,lineHeight:1.2}}>
+            {todayType==="Rest"?"Recovery Day":`${todayType} Day`}
+          </div>
+        </div>
+        {streak>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:10,
+            background:"rgba(255,159,67,0.1)",border:"1px solid rgba(255,159,67,0.12)"}}>
+            {Icons.flame({size:14,color:V.warn})}
+            <span style={{fontSize:15,fontWeight:800,color:V.warn,fontFamily:V.mono}}>{streak}</span>
+          </div>
+        )}
       </div>
 
-      {/* Today's Nutrition */}
-      {tn ? (
-        <Card>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-            <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Today's Intake</span>
-            <span style={{fontSize:20,fontWeight:700,color:V.warn,fontFamily:V.mono}}>{tn.cal}<span style={{fontSize:11,color:V.text3}}> kcal</span></span>
-          </div>
-          <Progress val={tn.cal} max={s.goals.cal} color={V.warn} h={8}/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:14}}>
-            {[{l:"Protein",v:tn.protein,g:s.goals.protein,c:V.accent},{l:"Carbs",v:tn.carbs,g:s.goals.carbs,c:V.accent2},{l:"Fat",v:tn.fat,g:s.goals.fat,c:V.warn}].map(m=>(
-              <div key={m.l}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{fontSize:10,color:m.c,fontWeight:600}}>{m.l}</span>
-                  <span style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>{m.v}/{m.g}</span>
+      {/* Quick Actions — compact */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        {[
+          {id:"log_workout",icon:Icons.dumbbell,label:"Workout",color:V.accent},
+          {id:"log_nutrition",icon:Icons.fork,label:"Nutrition",color:V.warn},
+          {id:"log_body",icon:Icons.scale,label:"Weigh In",color:V.accent2},
+        ].map(a=>(
+          <button key={a.id} onClick={()=>d({type:"TAB",tab:a.id})} style={{
+            display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"12px 6px",
+            background:`${a.color}06`,border:`1px solid ${a.color}15`,borderRadius:12,
+            cursor:"pointer",WebkitTapHighlightColor:"transparent",
+          }}>
+            <div style={{width:34,height:34,borderRadius:10,background:`${a.color}12`,
+              display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {a.icon({size:16,color:a.color})}
+            </div>
+            <span style={{fontSize:10,fontWeight:700,color:a.color}}>{a.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Week + Stats combined in one card */}
+      <Card style={{padding:12}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div style={{display:"flex",gap:4}}>
+            {last7.map((day,i)=>(
+              <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <span style={{fontSize:8,color:day.isToday?V.accent:V.text3,fontWeight:day.isToday?700:400}}>{day.day}</span>
+                <div style={{width:26,height:26,borderRadius:8,
+                  background:day.active?`${V.accent}20`:"rgba(255,255,255,0.03)",
+                  border:day.isToday?`1.5px solid ${V.accent}`:"1px solid rgba(255,255,255,0.04)",
+                  display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {day.active&&Icons.check({size:11,color:V.accent})}
                 </div>
-                <Progress val={m.v} max={m.g} color={m.c} h={5}/>
               </div>
             ))}
           </div>
-          {tn.water>0&&(
-            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10}}>
-              {Icons.droplet({size:14,color:V.accent2})}
-              <div style={{flex:1,display:"flex",gap:3}}>
-                {Array.from({length:8}).map((_,i)=>(
-                  <div key={i} style={{flex:1,height:12,borderRadius:3,
-                    background:i<tn.water?`${V.accent2}40`:"rgba(255,255,255,0.04)",transition:"all .3s"}}/>
-                ))}
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:18,fontWeight:800,color:V.accent,fontFamily:V.mono}}>{ww}<span style={{fontSize:10,color:V.text3,fontWeight:500}}>/7</span></div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:0,borderTop:`1px solid ${V.cardBorder}`,paddingTop:10}}>
+          <div style={{flex:1,textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:800,color:V.accent2,fontFamily:V.mono}}>{vol>1000?`${(vol/1000).toFixed(1)}k`:vol}</div>
+            <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Volume</div>
+          </div>
+          <div style={{width:1,background:V.cardBorder}}/>
+          <div style={{flex:1,textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:800,color:V.purple,fontFamily:V.mono}}>{latestBW||"--"}</div>
+            <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Weight ({u})</div>
+          </div>
+          <div style={{width:1,background:V.cardBorder}}/>
+          <div style={{flex:1,textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:800,color:V.warn,fontFamily:V.mono}}>{Object.keys(prs).length}</div>
+            <div style={{fontSize:8,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>PRs</div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Today's Nutrition — compact */}
+      {tn ? (
+        <Card style={{padding:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontSize:12,color:V.text3,fontWeight:600}}>Today's Intake</span>
+            <span style={{fontSize:16,fontWeight:700,color:V.warn,fontFamily:V.mono}}>{tn.cal}<span style={{fontSize:10,color:V.text3}}>/{s.goals.cal}</span></span>
+          </div>
+          <Progress val={tn.cal} max={s.goals.cal} color={V.warn} h={6}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:10}}>
+            {[{l:"P",v:tn.protein,g:s.goals.protein,c:V.accent},{l:"C",v:tn.carbs,g:s.goals.carbs,c:V.accent2},{l:"F",v:tn.fat,g:s.goals.fat,c:V.warn}].map(m=>(
+              <div key={m.l}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                  <span style={{fontSize:9,color:m.c,fontWeight:700}}>{m.l}</span>
+                  <span style={{fontSize:9,color:V.text3,fontFamily:V.mono}}>{m.v}/{m.g}</span>
+                </div>
+                <Progress val={m.v} max={m.g} color={m.c} h={4}/>
               </div>
-              <span style={{fontSize:11,color:V.accent2,fontFamily:V.mono,fontWeight:600}}>{tn.water}/8</span>
-            </div>
-          )}
-          {tn.sleep>0&&(
-            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}>
-              {Icons.moon({size:14,color:V.purple})}
-              <span style={{fontSize:11,color:V.purple,fontWeight:600}}>{tn.sleep.toFixed(1)} hrs sleep</span>
+            ))}
+          </div>
+          {(tn.water>0||tn.sleep>0)&&(
+            <div style={{display:"flex",alignItems:"center",gap:14,marginTop:8}}>
+              {tn.water>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
+                {Icons.droplet({size:11,color:V.accent2})}<span style={{fontSize:11,color:V.accent2,fontFamily:V.mono,fontWeight:600}}>{tn.water}/8</span>
+              </div>}
+              {tn.sleep>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
+                {Icons.moon({size:11,color:V.purple})}<span style={{fontSize:11,color:V.purple,fontFamily:V.mono,fontWeight:600}}>{tn.sleep.toFixed(1)}h</span>
+              </div>}
             </div>
           )}
         </Card>
       ) : (
-        <Card onClick={()=>d({type:"TAB",tab:"nutrition"})}>
-          <div style={{textAlign:"center",padding:"12px 0",color:V.text3,fontSize:13}}>Tap to log today's nutrition</div>
+        <button onClick={()=>d({type:"TAB",tab:"log_nutrition"})} style={{
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",
+          background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,
+          cursor:"pointer",WebkitTapHighlightColor:"transparent"
+        }}>
+          {Icons.fork({size:14,color:V.warn})}
+          <span style={{fontSize:12,color:V.warn,fontWeight:600}}>Log today's nutrition</span>
+        </button>
+      )}
+
+      {/* Today's Workout — only if completed */}
+      {todayW&&(
+        <Card glow style={{padding:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {Icons.check({size:14,color:V.accent})}
+            <span style={{fontSize:12,color:V.accent,fontWeight:700}}>Workout Complete</span>
+            <span style={{flex:1}}/>
+            <span style={{fontSize:10,color:V.text3}}>{todayW.exercises.reduce((n,e)=>n+e.sets.length,0)}s · {todayW.dur}m</span>
+            {todayW.rating&&<span style={{fontSize:9,color:V.warn}}>{"★".repeat(todayW.rating)}</span>}
+          </div>
         </Card>
       )}
 
-      {/* Strength Chart */}
-      <Card>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Strength</span>
-          <div style={{display:"flex",gap:8}}>
-            {[{id:"bench",c:V.accent,l:"B"},{id:"squat",c:V.accent2,l:"S"},{id:"deadlift",c:V.purple,l:"D"}].map(e=>(
-              <span key={e.id} style={{fontSize:9,color:e.c,display:"flex",alignItems:"center",gap:3,fontWeight:700}}>
-                <span style={{width:6,height:3,background:e.c,borderRadius:1}}/>{e.l}</span>
-            ))}
+      {/* Strength Chart — compact */}
+      {strengthData.length>1&&(
+        <Card style={{padding:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:12,color:V.text3,fontWeight:600}}>Strength</span>
+            <div style={{display:"flex",gap:6}}>
+              {[{c:V.accent,l:"B"},{c:V.accent2,l:"S"},{c:V.purple,l:"D"}].map(e=>(
+                <span key={e.l} style={{fontSize:8,color:e.c,display:"flex",alignItems:"center",gap:2,fontWeight:700}}>
+                  <span style={{width:5,height:2.5,background:e.c,borderRadius:1}}/>{e.l}</span>
+              ))}
+            </div>
           </div>
-        </div>
-        <ResponsiveContainer width="100%" height={150}>
-          <LineChart data={strengthData}>
-            <CartesianGrid {...chartCfg.grid} vertical={false}/>
-            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
-            <YAxis {...chartCfg.axis} width={30}/>
-            <Tooltip {...chartCfg.tip}/>
-            <Line type="monotone" dataKey="bench" stroke={V.accent} strokeWidth={2} dot={{r:2.5}}/>
-            <Line type="monotone" dataKey="squat" stroke={V.accent2} strokeWidth={2} dot={{r:2.5}}/>
-            <Line type="monotone" dataKey="deadlift" stroke={V.purple} strokeWidth={2} dot={{r:2.5}}/>
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart data={strengthData}>
+              <CartesianGrid {...chartCfg.grid} vertical={false}/>
+              <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+              <YAxis {...chartCfg.axis} width={28}/>
+              <Tooltip {...chartCfg.tip}/>
+              <Line type="monotone" dataKey="bench" stroke={V.accent} strokeWidth={1.5} dot={{r:2}} connectNulls/>
+              <Line type="monotone" dataKey="squat" stroke={V.accent2} strokeWidth={1.5} dot={{r:2}} connectNulls/>
+              <Line type="monotone" dataKey="deadlift" stroke={V.purple} strokeWidth={1.5} dot={{r:2}} connectNulls/>
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
-      {/* PR Wall */}
+      {/* PR Wall — top 3 only, inline */}
       {Object.keys(prs).length>0&&(
-        <Card>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-            {Icons.trophy({size:15,color:V.warn})}
-            <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Personal Records</span>
+        <Card style={{padding:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              {Icons.trophy({size:13,color:V.warn})}
+              <span style={{fontSize:12,color:V.text3,fontWeight:600}}>Top PRs</span>
+            </div>
+            <button onClick={()=>d({type:"TAB",tab:"track_workouts"})} style={{background:"none",border:"none",cursor:"pointer",
+              fontSize:10,color:V.accent,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>All</button>
           </div>
-          {Object.entries(prs).sort((a,b)=>b[1].e1rm-a[1].e1rm).slice(0,5).map(([id,pr])=>(
-            <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
-              <span style={{fontSize:12,color:V.text}}>{pr.name}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:12,color:V.accent,fontFamily:V.mono,fontWeight:700}}>{pr.weight}×{pr.reps}</span>
-                <span style={{fontSize:10,color:V.text3}}>E1RM: {pr.e1rm}</span>
-              </div>
+          {Object.entries(prs).sort((a,b)=>b[1].e1rm-a[1].e1rm).slice(0,3).map(([id,pr])=>(
+            <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+              <span style={{fontSize:11,color:V.text}}>{pr.name}</span>
+              <span style={{fontSize:12,color:V.accent,fontFamily:V.mono,fontWeight:700}}>{pr.weight}×{pr.reps}</span>
             </div>
           ))}
         </Card>
       )}
 
-      {/* Cal Chart */}
-      <Card>
-        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:12}}>Calories</span>
-        <ResponsiveContainer width="100%" height={130}>
-          <BarChart data={calData} barSize={8}>
-            <CartesianGrid {...chartCfg.grid} vertical={false}/>
-            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
-            <YAxis {...chartCfg.axis} width={30}/>
-            <Tooltip {...chartCfg.tip}/>
-            <Bar dataKey="cal" fill={V.warn} radius={[4,4,0,0]} opacity={0.8}/>
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-
-      {/* Recent */}
-      <div style={{fontSize:13,color:V.text2,fontWeight:600,marginTop:4}}>Recent</div>
-      {s.workouts.slice(0,4).map(w=>{
-        const names=w.exercises.map(e=>s.exercises.find(x=>x.id===e.exerciseId)?.name||e.exerciseId);
-        const sets=w.exercises.reduce((n,e)=>n+e.sets.length,0);
-        return(
-          <Card key={w.id} style={{padding:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:36,height:36,borderRadius:10,background:`${V.accent}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                {Icons.dumbbell({size:16,color:V.accent})}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,color:V.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{names.join(", ")}</div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:11,color:V.text3}}>{fmtShort(w.date)} · {sets}s · {w.dur}min</span>
-                  {w.rating&&<span style={{fontSize:8,color:V.warn}}>{Array.from({length:w.rating}).map((_,i)=>"★").join("")}</span>}
+      {/* Recent — 2 workouts, compact rows */}
+      {s.workouts.length>0&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:12,color:V.text3,fontWeight:600}}>Recent</span>
+            <button onClick={()=>d({type:"TAB",tab:"track_workouts"})} style={{background:"none",border:"none",cursor:"pointer",
+              fontSize:10,color:V.accent,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>All</button>
+          </div>
+          {s.workouts.slice(0,2).map(w=>{
+            const names=w.exercises.map(e=>s.exercises.find(x=>x.id===e.exerciseId)?.name||e.exerciseId);
+            const sets=w.exercises.reduce((n,e)=>n+e.sets.length,0);
+            return(
+              <div key={w.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,
+                background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:12}}>
+                <div style={{width:32,height:32,borderRadius:9,background:`${V.accent}10`,
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {Icons.dumbbell({size:14,color:V.accent})}
                 </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:V.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{names.join(", ")}</div>
+                  <div style={{fontSize:10,color:V.text3,marginTop:1}}>{fmtShort(w.date)} · {sets}s · {w.dur}m</div>
+                </div>
+                {w.rating&&<span style={{fontSize:8,color:V.warn}}>{"★".repeat(w.rating)}</span>}
               </div>
-            </div>
-          </Card>
-        );
-      })}
-      {s.workouts.length===0&&<div style={{textAlign:"center",padding:24,color:V.text3,fontSize:13}}>No workouts yet</div>}
+            );
+          })}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {s.workouts.length===0&&!tn&&(
+        <Card style={{textAlign:"center",padding:"24px 16px"}}>
+          <div style={{fontSize:32,marginBottom:8}}>💪</div>
+          <div style={{fontSize:15,fontWeight:700,color:V.text,marginBottom:4}}>Ready to start?</div>
+          <div style={{fontSize:11,color:V.text3,marginBottom:14}}>Log your first workout to see your dashboard come to life.</div>
+          <Btn full onClick={()=>d({type:"TAB",tab:"log_workout"})}>{Icons.dumbbell({size:16,color:V.bg})} Log First Workout</Btn>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1060,10 +1144,7 @@ function WorkoutTab({s,d}){
           </div>
 
           <Field label="Notes" value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="How did it feel?"/>
-          <div style={{display:"flex",gap:10,marginTop:8}}>
-            <Btn v="secondary" full onClick={()=>setShow(false)}>Cancel</Btn>
-            <Btn full onClick={save} disabled={form.exercises.length===0}>{Icons.check({size:16,color:V.bg})} Save</Btn>
-          </div>
+          <Btn full onClick={save} disabled={form.exercises.length===0} s={{marginTop:12}}>{Icons.check({size:16,color:V.bg})} Save Workout</Btn>
         </Sheet>
       )}
 
@@ -1222,10 +1303,7 @@ function NutritionTab({s,d}){
             <Field label="Sleep" type="number" value={form.sleep} onChange={v=>setForm(f=>({...f,sleep:v}))} unit="hrs" step="0.5"/>
           </div>
 
-          <div style={{display:"flex",gap:10,marginTop:12}}>
-            <Btn v="secondary" full onClick={()=>setShow(false)}>Cancel</Btn>
-            <Btn full onClick={save}>{Icons.check({size:16,color:V.bg})} Save</Btn>
-          </div>
+          <Btn full onClick={save} s={{marginTop:12}}>{Icons.check({size:16,color:V.bg})} Save Nutrition</Btn>
         </Sheet>
       )}
 
@@ -1326,10 +1404,7 @@ function BodyTab({s,d}){
             <Field label="Arms" type="number" value={form.arms} onChange={v=>setForm(f=>({...f,arms:v}))} unit="in" step="0.1"/>
             <Field label="Thighs" type="number" value={form.thighs} onChange={v=>setForm(f=>({...f,thighs:v}))} unit="in" step="0.1"/>
           </div>
-          <div style={{display:"flex",gap:10,marginTop:12}}>
-            <Btn v="secondary" full onClick={()=>setShow(false)}>Cancel</Btn>
-            <Btn full onClick={save}>{Icons.check({size:16,color:V.bg})} Save</Btn>
-          </div>
+          <Btn full onClick={save} s={{marginTop:12}}>{Icons.check({size:16,color:V.bg})} Save Nutrition</Btn>
         </Sheet>
       )}
 
@@ -1847,6 +1922,7 @@ function SettingsTab({s,d}){
   const [newCat,setNewCat]=useState("Chest");
   const [newYt,setNewYt]=useState("");
   const [confirmClear,setConfirmClear]=useState(false);
+  const [open,setOpen]=useState(null); // which section is expanded
 
   const saveGoals=()=>{
     d({type:"GOALS",g:{cal:parseInt(goals.cal)||2400,protein:parseInt(goals.protein)||180,carbs:parseInt(goals.carbs)||250,
@@ -1863,87 +1939,128 @@ function SettingsTab({s,d}){
     setNewEx("");setNewYt("");
   };
 
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* Units Toggle */}
-      <Card>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontSize:14,fontWeight:700,color:V.text}}>Weight Units</div>
-            <div style={{fontSize:11,color:V.text3}}>Used across all screens</div>
-          </div>
-          <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:10,overflow:"hidden"}}>
-            {["lbs","kg"].map(u=>(
-              <button key={u} onClick={()=>d({type:"UNITS",u})} style={{
-                padding:"8px 18px",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",
-                background:s.units===u?V.accent:"transparent",color:s.units===u?V.bg:V.text3,
-                WebkitTapHighlightColor:"transparent",transition:"all .2s"
-              }}>{u.toUpperCase()}</button>
-            ))}
-          </div>
-        </div>
-      </Card>
+  const toggle=(id)=>setOpen(o=>o===id?null:id);
 
-      {/* Goals */}
-      <Card>
-        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:14}}>Daily Goals</span>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+  const Row=({id,icon,label,desc,right,children})=>(
+    <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,overflow:"hidden",marginBottom:8}}>
+      <button onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",
+        width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent"}}>
+        <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.04)",
+          display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {icon}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:V.text}}>{label}</div>
+          {desc&&<div style={{fontSize:11,color:V.text3,marginTop:1}}>{desc}</div>}
+        </div>
+        {right||null}
+        <div style={{transition:"transform .2s",transform:open===id?"rotate(90deg)":"none"}}>
+          {Icons.chevRight({size:16,color:V.text3})}
+        </div>
+      </button>
+      {open===id&&(
+        <div style={{padding:"0 16px 16px",borderTop:`1px solid ${V.cardBorder}`}}>
+          <div style={{paddingTop:12}}>{children}</div>
+        </div>
+      )}
+    </div>
+  );
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",paddingBottom:16}}>
+      <div style={{fontSize:18,fontWeight:800,color:V.text,marginBottom:12}}>Settings</div>
+
+      {/* Units — inline toggle, no expand needed */}
+      <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,padding:"12px 16px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.04)",
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {Icons.scale({size:16,color:V.accent2})}
+          </div>
+          <div style={{fontSize:14,fontWeight:600,color:V.text}}>Units</div>
+        </div>
+        <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:10,overflow:"hidden"}}>
+          {["lbs","kg"].map(u=>(
+            <button key={u} onClick={()=>d({type:"UNITS",u})} style={{
+              padding:"7px 16px",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",
+              background:s.units===u?V.accent:"transparent",color:s.units===u?V.bg:V.text3,
+              WebkitTapHighlightColor:"transparent",transition:"all .2s"
+            }}>{u.toUpperCase()}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Date Range — inline chips, no expand needed */}
+      <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,padding:"12px 16px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.04)",
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {Icons.chart({size:16,color:V.purple})}
+          </div>
+          <div style={{fontSize:14,fontWeight:600,color:V.text}}>Range</div>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          {[7,14,30,90].map(n=>(
+            <button key={n} onClick={()=>d({type:"RANGE",d:n})} style={{
+              padding:"7px 12px",border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",
+              background:s.range===n?`${V.accent}15`:"rgba(255,255,255,0.04)",
+              color:s.range===n?V.accent:V.text3,WebkitTapHighlightColor:"transparent"
+            }}>{n}d</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Goals — expandable */}
+      <Row id="goals" icon={Icons.target({size:16,color:V.warn})} label="Daily Goals"
+        desc={`${s.goals.cal} cal · ${s.goals.protein}p · ${s.goals.carbs}c · ${s.goals.fat}f`}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <Field label="Calories" type="number" value={goals.cal} onChange={v=>setGoals(g=>({...g,cal:v}))} unit="kcal"/>
           <Field label="Protein" type="number" value={goals.protein} onChange={v=>setGoals(g=>({...g,protein:v}))} unit="g"/>
           <Field label="Carbs" type="number" value={goals.carbs} onChange={v=>setGoals(g=>({...g,carbs:v}))} unit="g"/>
           <Field label="Fat" type="number" value={goals.fat} onChange={v=>setGoals(g=>({...g,fat:v}))} unit="g"/>
-          <Field label="Goal Weight" type="number" value={goals.goalWeight} onChange={v=>setGoals(g=>({...g,goalWeight:v}))} unit={s.units}/>
         </div>
-        <Btn full onClick={saveGoals} s={{marginTop:4}}>{Icons.check({size:16,color:V.bg})} {saved?"Saved!":"Save Goals"}</Btn>
-      </Card>
+        <Field label="Goal Weight" type="number" value={goals.goalWeight} onChange={v=>setGoals(g=>({...g,goalWeight:v}))} unit={s.units}/>
+        <Btn full onClick={saveGoals} s={{marginTop:0}}>{Icons.check({size:16,color:V.bg})} {saved?"Saved!":"Save Goals"}</Btn>
+      </Row>
 
-      {/* Custom Exercise */}
-      <Card>
-        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:14}}>Custom Exercise</span>
+      {/* Custom Exercise — expandable */}
+      <Row id="exercise" icon={Icons.plus({size:16,color:V.accent})} label="Add Exercise"
+        desc={`${s.exercises.length} exercises in library`}>
         <Field label="Name" value={newEx} onChange={setNewEx} placeholder="e.g. Bulgarian Split Squat"/>
-        <Field label="YouTube Link (optional)" value={newYt} onChange={setNewYt} placeholder="Paste URL or video ID"/>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        <Field label="YouTube (optional)" value={newYt} onChange={setNewYt} placeholder="Video URL or ID"/>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
           {["Chest","Back","Legs","Shoulders","Arms","Core","Cardio"].map(c=>(
             <Chip key={c} label={c} active={newCat===c} onClick={()=>setNewCat(c)}/>
           ))}
         </div>
-        <Btn v="small" full onClick={addEx}>{Icons.plus({size:14,color:V.accent})} Add Exercise</Btn>
-      </Card>
+        <Btn full onClick={addEx}>{Icons.plus({size:14,color:V.bg})} Add</Btn>
+      </Row>
 
-      {/* Date Range */}
-      <Card>
-        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:8}}>Chart Date Range</span>
-        <div style={{display:"flex",gap:8}}>
-          {[7,14,30,90].map(n=>(
-            <Chip key={n} label={`${n}d`} active={s.range===n} onClick={()=>d({type:"RANGE",d:n})}/>
-          ))}
-        </div>
-      </Card>
-
-      {/* Export / Import */}
-      <Card>
-        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:8}}>Backup & Restore</span>
-        <div style={{fontSize:12,color:V.text3,marginBottom:12}}>Export all your data as a JSON file you can import back anytime.</div>
+      {/* Backup — expandable */}
+      <Row id="backup" icon={Icons.refresh({size:16,color:V.accent2})} label="Backup & Restore"
+        desc="Export or import your data">
         <DataManager s={s} d={d}/>
-      </Card>
+      </Row>
 
-      {/* Demo + Clear */}
-      <Card>
-        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:8}}>Data</span>
+      {/* Data management — expandable */}
+      <Row id="data" icon={Icons.trash({size:16,color:V.text3})} label="Data Management"
+        desc="Demo data and reset">
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          <Btn v="secondary" full onClick={()=>{const dm=genDemo();dm.workouts.forEach(w=>d({type:"ADD_W",w}));dm.nutrition.forEach(n=>d({type:"ADD_N",n}));dm.body.forEach(b=>d({type:"ADD_B",b}));}}>{Icons.refresh({size:14,color:V.text2})} Load Demo Data</Btn>
+          <Btn v="secondary" full onClick={()=>{const dm=genDemo();dm.workouts.forEach(w=>d({type:"ADD_W",w}));dm.nutrition.forEach(n=>d({type:"ADD_N",n}));dm.body.forEach(b=>d({type:"ADD_B",b}));setOpen(null);}}>{Icons.refresh({size:14,color:V.text2})} Load Demo Data</Btn>
           {!confirmClear?(
             <Btn v="secondary" full onClick={()=>setConfirmClear(true)} s={{borderColor:"rgba(255,107,107,0.2)"}}><span style={{color:V.danger}}>Clear All Data</span></Btn>
           ):(
             <div style={{display:"flex",gap:8}}>
               <Btn v="secondary" full onClick={()=>setConfirmClear(false)}>Cancel</Btn>
-              <Btn v="secondary" full onClick={()=>{d({type:"CLEAR_ALL"});setConfirmClear(false);}} s={{borderColor:V.danger}}><span style={{color:V.danger}}>Confirm Clear</span></Btn>
+              <Btn v="secondary" full onClick={()=>{d({type:"CLEAR_ALL"});setConfirmClear(false);}} s={{borderColor:V.danger}}><span style={{color:V.danger}}>Confirm</span></Btn>
             </div>
           )}
         </div>
-      </Card>
+      </Row>
 
-      <div style={{textAlign:"center",padding:"16px 0 8px"}}>
+      <div style={{textAlign:"center",padding:"20px 0 8px"}}>
         <span style={{fontSize:10,color:V.text3}}>IRONLOG v3 · Built by Bwise</span>
       </div>
     </div>
@@ -2055,8 +2172,14 @@ function Onboarding({d}){
   return(
     <div style={{minHeight:"100vh",maxWidth:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
       display:"flex",flexDirection:"column",justifyContent:"center",padding:"0 24px"}}>
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-      {/* Progress dots */}
+      {/* Back button + Progress dots */}
+      {step>0&&(
+        <button onClick={()=>setStep(s=>s-1)} style={{background:"none",border:"none",display:"flex",alignItems:"center",
+          gap:5,padding:"8px 0",marginBottom:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          {Icons.chevLeft({size:18,color:V.accent})}
+          <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span>
+        </button>
+      )}
       <div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:30}}>
         {steps.map((_,i)=>(
           <div key={i} style={{width:i===step?24:8,height:8,borderRadius:4,
@@ -2197,24 +2320,19 @@ function getOverloadSuggestion(exerciseId, workouts, units){
 
 // ─── Log Hub: Central action screen ───
 function LogHub({s,d}){
-  const [sub,setSub]=useState(null); // null=hub, "workout","nutrition","body"
-  if(sub==="workout") return <div><button onClick={()=>setSub(null)} style={{background:"none",border:"none",display:"flex",alignItems:"center",gap:6,padding:"8px 0",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>{Icons.chevLeft({size:18,color:V.accent})}<span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span></button><WorkoutTab s={s} d={d}/></div>;
-  if(sub==="nutrition") return <div><button onClick={()=>setSub(null)} style={{background:"none",border:"none",display:"flex",alignItems:"center",gap:6,padding:"8px 0",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>{Icons.chevLeft({size:18,color:V.accent})}<span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span></button><NutritionTab s={s} d={d}/></div>;
-  if(sub==="body") return <div><button onClick={()=>setSub(null)} style={{background:"none",border:"none",display:"flex",alignItems:"center",gap:6,padding:"8px 0",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>{Icons.chevLeft({size:18,color:V.accent})}<span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span></button><BodyTab s={s} d={d}/></div>;
-  
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{fontSize:20,fontWeight:800,color:V.text,marginBottom:4}}>What are you logging?</div>
       
       {[
-        {id:"workout",icon:Icons.dumbbell,label:"Workout",desc:"Log sets, reps, weight & RPE",color:V.accent,
+        {id:"log_workout",icon:Icons.dumbbell,label:"Workout",desc:"Log sets, reps, weight & RPE",color:V.accent,
           sub:"Templates · Rest Timer · PR Tracking"},
-        {id:"nutrition",icon:Icons.fork,label:"Nutrition",desc:"Log meals with 500+ food database",color:V.warn,
+        {id:"log_nutrition",icon:Icons.fork,label:"Nutrition",desc:"Log meals with 500+ food database",color:V.warn,
           sub:"Auto-calc macros · Water · Sleep"},
-        {id:"body",icon:Icons.scale,label:"Body Metrics",desc:"Track weight, body fat & measurements",color:V.accent2,
+        {id:"log_body",icon:Icons.scale,label:"Body Metrics",desc:"Track weight, body fat & measurements",color:V.accent2,
           sub:"Weight · Body Fat · Chest · Waist · Arms"},
       ].map(item=>(
-        <button key={item.id} onClick={()=>setSub(item.id)} style={{
+        <button key={item.id} onClick={()=>d({type:"TAB",tab:item.id})} style={{
           display:"flex",alignItems:"center",gap:16,padding:18,
           background:"rgba(255,255,255,0.02)",border:`1px solid ${V.cardBorder}`,borderRadius:16,
           cursor:"pointer",WebkitTapHighlightColor:"transparent",textAlign:"left",width:"100%",
@@ -2237,32 +2355,20 @@ function LogHub({s,d}){
 
 // ─── Track Hub: All data views ───
 function TrackHub({s,d}){
-  const [sub,setSub]=useState(null);
-  
-  const Back=()=><button onClick={()=>setSub(null)} style={{background:"none",border:"none",display:"flex",alignItems:"center",gap:6,padding:"8px 0",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>{Icons.chevLeft({size:18,color:V.accent})}<span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span></button>;
-  
-  if(sub==="workouts") return <div><Back/><WorkoutTab s={s} d={d}/></div>;
-  if(sub==="nutrition") return <div><Back/><NutritionTab s={s} d={d}/></div>;
-  if(sub==="calendar") return <div><Back/><CalendarTab s={s} d={d}/></div>;
-  if(sub==="analytics") return <div><Back/><AnalyticsTab s={s} d={d}/></div>;
-  if(sub==="body") return <div><Back/><BodyTab s={s} d={d}/></div>;
-  if(sub==="photos") return <div><Back/><ProgressPhotos s={s} d={d}/></div>;
-  if(sub==="onerm") return <div><Back/><OneRMCalc units={s.units}/></div>;
-  
   return(
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <div style={{fontSize:20,fontWeight:800,color:V.text,marginBottom:4}}>Your Progress</div>
       
       {[
-        {id:"calendar",icon:Icons.calendar,label:"Weekly Plan",desc:"Schedule & calendar view",color:"#34d399"},
-        {id:"workouts",icon:Icons.dumbbell,label:"Workout History",desc:"All workouts, PRs & volume",color:V.accent},
-        {id:"nutrition",icon:Icons.fork,label:"Nutrition History",desc:"Macros, calories & trends",color:V.warn},
-        {id:"body",icon:Icons.scale,label:"Body Progress",desc:"Weight, measurements & charts",color:V.accent2},
-        {id:"photos",icon:Icons.target,label:"Progress Photos",desc:"Visual body transformation tracking",color:"#e879f9"},
-        {id:"analytics",icon:Icons.chart,label:"Analytics",desc:"Progression, volume & frequency",color:V.purple},
-        {id:"onerm",icon:Icons.zap,label:"1RM Calculator",desc:"Estimate your one-rep max",color:V.warn},
+        {id:"track_calendar",icon:Icons.calendar,label:"Weekly Plan",desc:"Schedule & calendar view",color:"#34d399"},
+        {id:"track_workouts",icon:Icons.dumbbell,label:"Workout History",desc:"All workouts, PRs & volume",color:V.accent},
+        {id:"track_nutrition",icon:Icons.fork,label:"Nutrition History",desc:"Macros, calories & trends",color:V.warn},
+        {id:"track_body",icon:Icons.scale,label:"Body Progress",desc:"Weight, measurements & charts",color:V.accent2},
+        {id:"track_photos",icon:Icons.target,label:"Progress Photos",desc:"Visual body transformation tracking",color:"#e879f9"},
+        {id:"track_analytics",icon:Icons.chart,label:"Analytics",desc:"Progression, volume & frequency",color:V.purple},
+        {id:"track_onerm",icon:Icons.zap,label:"1RM Calculator",desc:"Estimate your one-rep max",color:V.warn},
       ].map(item=>(
-        <button key={item.id} onClick={()=>setSub(item.id)} style={{
+        <button key={item.id} onClick={()=>d({type:"TAB",tab:item.id})} style={{
           display:"flex",alignItems:"center",gap:14,padding:16,
           background:"rgba(255,255,255,0.02)",border:`1px solid ${V.cardBorder}`,borderRadius:14,
           cursor:"pointer",WebkitTapHighlightColor:"transparent",textAlign:"left",width:"100%",
@@ -2317,6 +2423,23 @@ function App(){
   // Show onboarding if first launch
   if(s.loaded&&!s.onboarded) return <Onboarding d={d}/>;
 
+  // Back button component for sub-pages
+  const SubBack=({to,label})=>(
+    <button onClick={()=>d({type:"TAB",tab:to})} style={{background:"none",border:"none",display:"flex",alignItems:"center",
+      gap:5,padding:"8px 0 12px",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+      {Icons.chevLeft({size:18,color:V.accent})}
+      <span style={{fontSize:14,color:V.accent,fontWeight:600}}>{label||"Back"}</span>
+    </button>
+  );
+
+  // Map tab to parent for bottom nav highlighting
+  const tabParent=(t)=>{
+    if(t.startsWith("log_"))return"log";
+    if(t.startsWith("track_"))return"track";
+    return t;
+  };
+  const activeParent=tabParent(s.tab);
+
   const tabs=[
     {id:"home",icon:Icons.activity,label:"Home"},
     {id:"log",icon:Icons.plus,label:"Log"},
@@ -2329,22 +2452,22 @@ function App(){
       minHeight:"100vh",maxWidth:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
       display:"flex",flexDirection:"column",position:"relative",overflow:"hidden",
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
       {/* Status Bar Area */}
       <div style={{height:"env(safe-area-inset-top, 0px)",background:V.bg,flexShrink:0}}/>
 
       {/* Header */}
       <div style={{padding:"12px 20px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <button onClick={()=>d({type:"TAB",tab:"home"})} style={{display:"flex",alignItems:"center",gap:8,
+          background:"none",border:"none",cursor:"pointer",padding:0,WebkitTapHighlightColor:"transparent"}}>
           <div style={{width:28,height:28,borderRadius:8,background:`linear-gradient(135deg,${V.accent},${V.accent2})`,
             display:"flex",alignItems:"center",justifyContent:"center"}}>
             {Icons.activity({size:15,color:V.bg,strokeWidth:2.5})}
           </div>
-          <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.03em"}}>
+          <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.03em",color:V.text}}>
             IRON<span style={{color:V.accent}}>LOG</span>
           </span>
-        </div>
+        </button>
         <div style={{display:"flex",gap:3}}>
           {[7,14,30].map(n=>(
             <button key={n} onClick={()=>d({type:"RANGE",d:n})} style={{
@@ -2362,9 +2485,23 @@ function App(){
         {s.tab==="log"&&<LogHub s={s} d={d}/>}
         {s.tab==="track"&&<TrackHub s={s} d={d}/>}
         {s.tab==="settings"&&<SettingsTab s={s} d={d}/>}
+
+        {/* Log sub-pages */}
+        {s.tab==="log_workout"&&<div><SubBack to="log" label="Log"/><WorkoutTab s={s} d={d}/></div>}
+        {s.tab==="log_nutrition"&&<div><SubBack to="log" label="Log"/><NutritionTab s={s} d={d}/></div>}
+        {s.tab==="log_body"&&<div><SubBack to="log" label="Log"/><BodyTab s={s} d={d}/></div>}
+
+        {/* Track sub-pages */}
+        {s.tab==="track_calendar"&&<div><SubBack to="track" label="Track"/><CalendarTab s={s} d={d}/></div>}
+        {s.tab==="track_workouts"&&<div><SubBack to="track" label="Track"/><WorkoutTab s={s} d={d}/></div>}
+        {s.tab==="track_nutrition"&&<div><SubBack to="track" label="Track"/><NutritionTab s={s} d={d}/></div>}
+        {s.tab==="track_body"&&<div><SubBack to="track" label="Track"/><BodyTab s={s} d={d}/></div>}
+        {s.tab==="track_photos"&&<div><SubBack to="track" label="Track"/><ProgressPhotos s={s} d={d}/></div>}
+        {s.tab==="track_analytics"&&<div><SubBack to="track" label="Track"/><AnalyticsTab s={s} d={d}/></div>}
+        {s.tab==="track_onerm"&&<div><SubBack to="track" label="Track"/><OneRMCalc units={s.units}/></div>}
       </div>
 
-      {/* Bottom Nav — 4 tabs, big touch targets */}
+      {/* Bottom Nav — always visible, highlights parent group */}
       <div style={{
         flexShrink:0,background:"rgba(8,8,13,0.95)",backdropFilter:"blur(24px) saturate(180%)",
         borderTop:`1px solid rgba(255,255,255,0.06)`,
@@ -2372,7 +2509,7 @@ function App(){
         display:"flex",justifyContent:"space-around",alignItems:"center",paddingTop:8,
       }}>
         {tabs.map(t=>{
-          const active=s.tab===t.id;
+          const active=activeParent===t.id;
           return(
             <button key={t.id} onClick={()=>d({type:"TAB",tab:t.id})} style={{
               display:"flex",flexDirection:"column",alignItems:"center",gap:3,
