@@ -60,18 +60,26 @@ function updateMsg(msg) {
 
 // Load scripts sequentially to guarantee order
 updateMsg('Loading React...');
-loadScript('https://unpkg.com/react@18/umd/react.production.min.js', 'React')
+loadScript('https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js', 'React')
 .then(function() {
   updateMsg('Loading React DOM...');
-  return loadScript('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js', 'ReactDOM');
+  return loadScript('https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js', 'ReactDOM');
 })
 .then(function() {
   updateMsg('Loading Charts...');
-  return loadScript('https://unpkg.com/recharts@2.12.7/umd/Recharts.js', 'Recharts');
+  return loadScript('https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js', 'Recharts')
+    .catch(function() {
+      updateMsg('Retrying charts from backup CDN...');
+      return loadScript('https://unpkg.com/recharts@2.5.0/umd/Recharts.js', 'Recharts');
+    });
 })
 .then(function() {
   updateMsg('Loading Compiler...');
-  return loadScript('https://unpkg.com/@babel/standalone@7.24.0/babel.min.js', 'Babel');
+  return loadScript('https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js', 'Babel')
+    .catch(function() {
+      updateMsg('Retrying compiler from backup CDN...');
+      return loadScript('https://unpkg.com/@babel/standalone@7.24.0/babel.min.js', 'Babel');
+    });
 })
 .then(function() {
   updateMsg('Starting app...');
