@@ -164,6 +164,7 @@ const CloudSync={
           body:state.body||[],
           photos:(state.photos||[]).filter(p=>!p.data||p.data.length<500000),
           checkins:state.checkins||[],
+          milestones:state.milestones||[],
           settings:{
             goals:state.goals,
             schedule:state.schedule,
@@ -3395,12 +3396,18 @@ function DataManager({s,d}){
       const newN=(cloud.nutrition||[]).filter(n=>!existingNIds.has(n.id));
       const newB=(cloud.body||[]).filter(b=>!existingBIds.has(b.id));
       const newP=(cloud.photos||[]).filter(p=>!s.photos.some(x=>x.id===p.id));
+      const existingCheckinDates=new Set((s.checkins||[]).map(c=>c.date));
+      const newC=(cloud.checkins||[]).filter(c=>!existingCheckinDates.has(c.date));
+      const existingMIds=new Set((s.milestones||[]).map(m=>m.id));
+      const newM=(cloud.milestones||[]).filter(m=>!existingMIds.has(m.id));
 
       const merged={
         workouts:[...s.workouts,...newW].sort((a,b)=>b.date.localeCompare(a.date)),
         nutrition:[...s.nutrition,...newN].sort((a,b)=>b.date.localeCompare(a.date)),
         body:[...s.body,...newB].sort((a,b)=>b.date.localeCompare(a.date)),
         photos:[...s.photos,...newP],
+        checkins:[...(s.checkins||[]),...newC],
+        milestones:[...(s.milestones||[]),...newM],
         exercises:cloud.exercises||s.exercises,
         goals:cloud.goals||s.goals,
         schedule:cloud.schedule||s.schedule,
@@ -3408,7 +3415,7 @@ function DataManager({s,d}){
         profile:cloud.profile||s.profile,
       };
       d({type:"IMPORT",data:merged});
-      setMsg({type:"success",text:`Restored from cloud! +${newW.length} workouts, +${newN.length} nutrition, +${newB.length} measurements`});
+      setMsg({type:"success",text:`Restored from cloud! +${newW.length} workouts, +${newN.length} nutrition, +${newB.length} measurements, +${newC.length} check-ins, +${newM.length} goals`});
     }else{
       setMsg({type:"error",text:"No cloud backup found for this account, or server is unreachable."});
     }
