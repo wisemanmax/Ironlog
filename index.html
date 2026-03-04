@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="IRONLOG"/>
+<meta name="theme-color" content="#08080d"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<title>IRONLOG</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./icon-180.png"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body,#root{height:100%;width:100%;background:#08080d;overflow:hidden}
+body{font-family:'Outfit',sans-serif;color:#e8e8ec;overscroll-behavior:none}
+input,select,button{font-family:inherit}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-type="module">
+const {useState,useEffect,useReducer,useMemo,useRef,useCallback}=React;
+const {LineChart,Line,AreaChart,Area,BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,ResponsiveContainer,PieChart,Pie,Cell}=Recharts;
+
+
+// ─── Icons (inline SVG for mobile perf) ───
+const Icon = ({ d, size = 20, color = "currentColor", strokeWidth = 2 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">{typeof d === 'string' ? <path d={d}/> : d}</svg>
+);
+const Icons = {
+  dumbbell: (p) => <Icon {...p} d={<><path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767-1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l1.767 1.767a2 2 0 1 1 2.829 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></>}/>,
+  flame: (p) => <Icon {...p} d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>,
+  scale: (p) => <Icon {...p} d={<><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></>}/>,
+  chart: (p) => <Icon {...p} d={<><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></>}/>,
+  target: (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>}/>,
+  plus: (p) => <Icon {...p} d={<><path d="M5 12h14"/><path d="M12 5v14"/></>}/>,
+  x: (p) => <Icon {...p} d={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>}/>,
+  check: (p) => <Icon {...p} d="M20 6 9 17l-5-5"/>,
+  trash: (p) => <Icon {...p} d={<><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></>}/>,
+  chevDown: (p) => <Icon {...p} d="m6 9 6 6 6-6"/>,
+  chevRight: (p) => <Icon {...p} d="m9 18 6-6-6-6"/>,
+  fork: (p) => <Icon {...p} d={<><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></>}/>,
+  activity: (p) => <Icon {...p} d="M22 12h-4l-3 9L9 3l-3 9H2"/>,
+  droplet: (p) => <Icon {...p} d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>,
+  arrowUp: (p) => <Icon {...p} d={<><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></>}/>,
+  arrowDown: (p) => <Icon {...p} d={<><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></>}/>,
+  refresh: (p) => <Icon {...p} d={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>}/>,
+  zap: (p) => <Icon {...p} d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>,
+  play: (p) => <Icon {...p} d={<><polygon points="5 3 19 12 5 21 5 3" fill={p?.color||"currentColor"} stroke="none"/></>}/>,
+  extLink: (p) => <Icon {...p} d={<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>}/>,
+  calendar: (p) => <Icon {...p} d={<><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>}/>,
+  chevLeft: (p) => <Icon {...p} d="m15 18-6-6 6-6"/>,
+  clock: (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>}/>,
+  search: (p) => <Icon {...p} d={<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>}/>,
+  trophy: (p) => <Icon {...p} d={<><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></>}/>,
+  moon: (p) => <Icon {...p} d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>,
+  pause: (p) => <Icon {...p} d={<><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></>}/>,
+  copy: (p) => <Icon {...p} d={<><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></>}/>,
+  hash: (p) => <Icon {...p} d={<><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>}/>,
+};
+
+// ─── Helpers ───
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const today = () => new Date().toISOString().split("T")[0];
+const fmtShort = (d) => new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
+const fmtFull = (d) => new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+const ago = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split("T")[0]; };
+const calc1RM = (w,r) => r===1?w:Math.round(w*(1+r/30));
+const fmtTimer = (s) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
+const PLATES=[45,35,25,10,5,2.5];
+const calcPlates=(total)=>{let ps=(total-45)/2;if(ps<=0)return total<=45?[]:null;const r=[];for(const p of PLATES){while(ps>=p){r.push(p);ps-=p;}}return ps===0?r:null;};
+
+const defaultExercises = [
+  // ─── CHEST ───
+  {id:"bench",name:"Bench Press",cat:"Chest",yt:"rT7DgCr-3pg"},
+  {id:"incbench",name:"Incline Bench Press",cat:"Chest",yt:"SrqOu55lrYU"},
+  {id:"decbench",name:"Decline Bench Press",cat:"Chest",yt:"LfyQBUKR8SE"},
+  {id:"dbbench",name:"Dumbbell Bench Press",cat:"Chest",yt:"VmB1G1K7v94"},
+  {id:"dbincbench",name:"Incline DB Press",cat:"Chest",yt:"8iPEnn-ltC8"},
+  {id:"flye",name:"Cable Flye",cat:"Chest",yt:"Iwe6AmxVf7o"},
+  {id:"dbflye",name:"Dumbbell Flye",cat:"Chest",yt:"eozdVDA78K0"},
+  {id:"dip",name:"Dips",cat:"Chest",yt:"2z8JmcrW-As"},
+  {id:"pushup",name:"Push-ups",cat:"Chest",yt:"IODxDxX7oi4"},
+  {id:"machpress",name:"Machine Chest Press",cat:"Chest",yt:"xUm0BiZCWlQ"},
+  {id:"pecfly",name:"Pec Deck Fly",cat:"Chest",yt:"eGjt4lk6g34"},
+  {id:"svbench",name:"Smith Machine Bench",cat:"Chest",yt:"MlynOMecraM"},
+
+  // ─── BACK ───
+  {id:"deadlift",name:"Deadlift",cat:"Back",yt:"XxWcirHIwVo"},
+  {id:"row",name:"Barbell Row",cat:"Back",yt:"FWJR5Ve8bnQ"},
+  {id:"pullup",name:"Pull-ups",cat:"Back",yt:"eGo4IYlbE5g"},
+  {id:"latpull",name:"Lat Pulldown",cat:"Back",yt:"CAwf7n6Luuc"},
+  {id:"chinup",name:"Chin-ups",cat:"Back",yt:"brhRXlOhWI8"},
+  {id:"cablerow",name:"Seated Cable Row",cat:"Back",yt:"GZbfZ033f74"},
+  {id:"dbrow",name:"Dumbbell Row",cat:"Back",yt:"roCP6wCXPqo"},
+  {id:"tbarrow",name:"T-Bar Row",cat:"Back",yt:"j3Igk5nyZE4"},
+  {id:"pendlay",name:"Pendlay Row",cat:"Back",yt:"V8dZ3pyiCBo"},
+  {id:"sumo",name:"Sumo Deadlift",cat:"Back",yt:"widGEAcQuGI"},
+  {id:"rdl",name:"Romanian Deadlift",cat:"Back",yt:"7AaaYBqMFJg"},
+  {id:"hyperext",name:"Hyperextension",cat:"Back",yt:"ph3pddpKzzw"},
+  {id:"straightarm",name:"Straight Arm Pulldown",cat:"Back",yt:"AjCCGN2kE_A"},
+  {id:"meadows",name:"Meadows Row",cat:"Back",yt:"vSPHMcJxMOs"},
+
+  // ─── LEGS ───
+  {id:"squat",name:"Barbell Squat",cat:"Legs",yt:"bEv6CCg2BC8"},
+  {id:"legpress",name:"Leg Press",cat:"Legs",yt:"IZxyjW7MPJQ"},
+  {id:"lunge",name:"Lunges",cat:"Legs",yt:"QOVaHwm-Q6U"},
+  {id:"frontsquat",name:"Front Squat",cat:"Legs",yt:"m4ytaCJZpl0"},
+  {id:"bss",name:"Bulgarian Split Squat",cat:"Legs",yt:"2C-uNgKwPLE"},
+  {id:"goblet",name:"Goblet Squat",cat:"Legs",yt:"MeIiIdhvXT4"},
+  {id:"legext",name:"Leg Extension",cat:"Legs",yt:"YyvSfVjQeL0"},
+  {id:"hamcurl",name:"Hamstring Curl",cat:"Legs",yt:"1Tq3QdYUuHs"},
+  {id:"calfraise",name:"Calf Raise",cat:"Legs",yt:"-M4-G8p8fmc"},
+  {id:"hacksquat",name:"Hack Squat",cat:"Legs",yt:"EdtaJRBqwes"},
+  {id:"stepup",name:"Step Ups",cat:"Legs",yt:"dQqApCGd5Ag"},
+  {id:"hipthrust",name:"Hip Thrust",cat:"Legs",yt:"SEdqd1n0icg"},
+  {id:"legcurl",name:"Seated Leg Curl",cat:"Legs",yt:"Orxowest56U"},
+  {id:"sldl",name:"Stiff-Leg Deadlift",cat:"Legs",yt:"CN_7cz3P-1U"},
+  {id:"sissy",name:"Sissy Squat",cat:"Legs",yt:"q_Q5s5HkJho"},
+
+  // ─── SHOULDERS ───
+  {id:"ohp",name:"Overhead Press",cat:"Shoulders",yt:"2yjwXTZQDDI"},
+  {id:"dbohp",name:"DB Shoulder Press",cat:"Shoulders",yt:"qEwKCR5JCog"},
+  {id:"lateralraise",name:"Lateral Raise",cat:"Shoulders",yt:"3VcKaXpzqRo"},
+  {id:"facepull",name:"Face Pull",cat:"Shoulders",yt:"rep-qVOkqgk"},
+  {id:"shrug",name:"Barbell Shrug",cat:"Shoulders",yt:"cJRVVxmytaM"},
+  {id:"reardelt",name:"Rear Delt Fly",cat:"Shoulders",yt:"EA7u4Q_8HQ0"},
+  {id:"arnoldpress",name:"Arnold Press",cat:"Shoulders",yt:"6Z15_WdXmVw"},
+  {id:"uprow",name:"Upright Row",cat:"Shoulders",yt:"amCU-ziHITM"},
+  {id:"cablateral",name:"Cable Lateral Raise",cat:"Shoulders",yt:"PPrzBWZDOhA"},
+  {id:"landmine",name:"Landmine Press",cat:"Shoulders",yt:"Oy8n_RKOhMc"},
+  {id:"dbshrug",name:"Dumbbell Shrug",cat:"Shoulders",yt:"g6qbq4Lf1FI"},
+  {id:"frontraise",name:"Front Raise",cat:"Shoulders",yt:"-t7fuZ0KhDA"},
+
+  // ─── ARMS ───
+  {id:"curl",name:"Bicep Curl",cat:"Arms",yt:"ykJmrZ5v0Oo"},
+  {id:"tricep",name:"Tricep Pushdown",cat:"Arms",yt:"2-LAMcpzODU"},
+  {id:"hammercurl",name:"Hammer Curl",cat:"Arms",yt:"zC3nLlEvin4"},
+  {id:"preacher",name:"Preacher Curl",cat:"Arms",yt:"fIWP-FRFNU0"},
+  {id:"skullcrusher",name:"Skull Crushers",cat:"Arms",yt:"d_KZxkY_0cM"},
+  {id:"ohtriext",name:"Overhead Tricep Extension",cat:"Arms",yt:"_gsUck-7M74"},
+  {id:"concurl",name:"Concentration Curl",cat:"Arms",yt:"0AUGkch3tzc"},
+  {id:"cablecurl",name:"Cable Curl",cat:"Arms",yt:"NFzpMJ4kcSI"},
+  {id:"tridip",name:"Tricep Dip (Bench)",cat:"Arms",yt:"6kALZikXxLc"},
+  {id:"revbarbell",name:"Reverse Barbell Curl",cat:"Arms",yt:"nRgxYX2Ve9w"},
+  {id:"bayesian",name:"Bayesian Curl",cat:"Arms",yt:"3uFI7IOwrqQ"},
+  {id:"closegrip",name:"Close-Grip Bench Press",cat:"Arms",yt:"nEF0bv2FW94"},
+  {id:"kickback",name:"Tricep Kickback",cat:"Arms",yt:"6SS6K3lAwZ8"},
+  {id:"spidercurl",name:"Spider Curl",cat:"Arms",yt:"iowFPuJYiOA"},
+
+  // ─── CORE ───
+  {id:"plank",name:"Plank",cat:"Core",yt:"pvIjsG5Svck"},
+  {id:"crunch",name:"Crunches",cat:"Core",yt:"Xyd_fa5zoEU"},
+  {id:"hangleg",name:"Hanging Leg Raise",cat:"Core",yt:"Pr1ieGZ5u4E"},
+  {id:"cablecrunch",name:"Cable Crunch",cat:"Core",yt:"AV5PmrIVgDI"},
+  {id:"russiantwist",name:"Russian Twist",cat:"Core",yt:"wkD8rjkodUI"},
+  {id:"abwheel",name:"Ab Wheel Rollout",cat:"Core",yt:"rqiTPmI85nM"},
+  {id:"woodchop",name:"Cable Woodchop",cat:"Core",yt:"pAplQXk3dkU"},
+  {id:"deadbug",name:"Dead Bug",cat:"Core",yt:"4XLEnwUr1d8"},
+  {id:"pallof",name:"Pallof Press",cat:"Core",yt:"AH_QZLm_0-s"},
+  {id:"decline_sit",name:"Decline Sit-up",cat:"Core",yt:"hhj5_Uy3GfU"},
+
+  // ─── CARDIO ───
+  {id:"treadmill",name:"Treadmill Run",cat:"Cardio",yt:"8_zHaUL_kSE"},
+  {id:"rowing",name:"Rowing Machine",cat:"Cardio",yt:"EYngSUMYfKQ"},
+  {id:"stairmaster",name:"Stairmaster",cat:"Cardio",yt:"O4Fkflfvyac"},
+  {id:"biking",name:"Stationary Bike",cat:"Cardio",yt:"0TM8HOIA7_Q"},
+  {id:"jumprope",name:"Jump Rope",cat:"Cardio",yt:"FJmRQ5iTXKE"},
+  {id:"elliptical",name:"Elliptical",cat:"Cardio",yt:"oMzNoRldjEM"},
+  {id:"battlerop",name:"Battle Ropes",cat:"Cardio",yt:"4nW4MYnGfyY"},
+  {id:"burpee",name:"Burpees",cat:"Cardio",yt:"dZgVxmf6jkA"},
+];
+
+// ─── Food Database (500+ items with macros) ───
+const FOODS=[
+  // Proteins
+  {n:"Chicken Breast (4oz)",cal:187,p:35,c:0,f:4,cat:"Protein"},{n:"Chicken Thigh (4oz)",cal:232,p:28,c:0,f:13,cat:"Protein"},
+  {n:"Ground Turkey (4oz)",cal:170,p:21,c:0,f:9,cat:"Protein"},{n:"Ground Beef 90/10 (4oz)",cal:200,p:22,c:0,f:11,cat:"Protein"},
+  {n:"Ground Beef 80/20 (4oz)",cal:280,p:20,c:0,f:23,cat:"Protein"},{n:"Steak Sirloin (6oz)",cal:276,p:46,c:0,f:9,cat:"Protein"},
+  {n:"Steak Ribeye (6oz)",cal:390,p:39,c:0,f:25,cat:"Protein"},{n:"Salmon Fillet (4oz)",cal:233,p:25,c:0,f:14,cat:"Protein"},
+  {n:"Tuna Canned (1 can)",cal:120,p:27,c:0,f:1,cat:"Protein"},{n:"Shrimp (4oz)",cal:120,p:23,c:1,f:2,cat:"Protein"},
+  {n:"Tilapia (4oz)",cal:110,p:23,c:0,f:2,cat:"Protein"},{n:"Cod (4oz)",cal:93,p:20,c:0,f:1,cat:"Protein"},
+  {n:"Pork Chop (4oz)",cal:187,p:30,c:0,f:7,cat:"Protein"},{n:"Pork Tenderloin (4oz)",cal:136,p:23,c:0,f:4,cat:"Protein"},
+  {n:"Bacon (3 slices)",cal:129,p:9,c:0,f:10,cat:"Protein"},{n:"Turkey Bacon (3 slices)",cal:90,p:10,c:0,f:5,cat:"Protein"},
+  {n:"Egg (1 large)",cal:72,p:6,c:0,f:5,cat:"Protein"},{n:"Egg Whites (3 large)",cal:51,p:11,c:0,f:0,cat:"Protein"},
+  {n:"Tofu Firm (4oz)",cal:88,p:10,c:2,f:5,cat:"Protein"},{n:"Tempeh (4oz)",cal:222,p:21,c:8,f:13,cat:"Protein"},
+  {n:"Turkey Breast Deli (3oz)",cal:90,p:18,c:1,f:1,cat:"Protein"},{n:"Ham Deli (3oz)",cal:90,p:14,c:2,f:3,cat:"Protein"},
+  {n:"Beef Jerky (1oz)",cal:116,p:9,c:3,f:7,cat:"Protein"},{n:"Bison (4oz)",cal:166,p:24,c:0,f:7,cat:"Protein"},
+  {n:"Lamb (4oz)",cal:250,p:26,c:0,f:16,cat:"Protein"},{n:"Duck Breast (4oz)",cal:180,p:23,c:0,f:9,cat:"Protein"},
+  // Dairy
+  {n:"Whole Milk (1 cup)",cal:149,p:8,c:12,f:8,cat:"Dairy"},{n:"2% Milk (1 cup)",cal:122,p:8,c:12,f:5,cat:"Dairy"},
+  {n:"Skim Milk (1 cup)",cal:83,p:8,c:12,f:0,cat:"Dairy"},{n:"Greek Yogurt Plain (1 cup)",cal:130,p:22,c:8,f:0,cat:"Dairy"},
+  {n:"Greek Yogurt Honey (1 cup)",cal:190,p:18,c:25,f:3,cat:"Dairy"},{n:"Cottage Cheese (1 cup)",cal:206,p:28,c:8,f:9,cat:"Dairy"},
+  {n:"Cottage Cheese Low-Fat (1 cup)",cal:163,p:28,c:6,f:2,cat:"Dairy"},{n:"Cheddar Cheese (1oz)",cal:113,p:7,c:0,f:9,cat:"Dairy"},
+  {n:"Mozzarella (1oz)",cal:85,p:6,c:1,f:6,cat:"Dairy"},{n:"Cream Cheese (2 tbsp)",cal:99,p:2,c:1,f:10,cat:"Dairy"},
+  {n:"String Cheese (1 stick)",cal:80,p:7,c:1,f:6,cat:"Dairy"},{n:"Butter (1 tbsp)",cal:102,p:0,c:0,f:12,cat:"Dairy"},
+  {n:"Heavy Cream (2 tbsp)",cal:100,p:1,c:1,f:11,cat:"Dairy"},{n:"Whey Protein Scoop",cal:120,p:24,c:3,f:1,cat:"Dairy"},
+  {n:"Casein Protein Scoop",cal:120,p:24,c:4,f:1,cat:"Dairy"},
+  // Grains
+  {n:"White Rice (1 cup cooked)",cal:206,p:4,c:45,f:0,cat:"Grains"},{n:"Brown Rice (1 cup cooked)",cal:216,p:5,c:45,f:2,cat:"Grains"},
+  {n:"Quinoa (1 cup cooked)",cal:222,p:8,c:39,f:4,cat:"Grains"},{n:"Oatmeal (1/2 cup dry)",cal:150,p:5,c:27,f:3,cat:"Grains"},
+  {n:"Oatmeal Instant (1 packet)",cal:130,p:4,c:23,f:3,cat:"Grains"},{n:"Pasta (2oz dry)",cal:200,p:7,c:42,f:1,cat:"Grains"},
+  {n:"Whole Wheat Pasta (2oz dry)",cal:180,p:8,c:39,f:1,cat:"Grains"},{n:"Bread White (1 slice)",cal:67,p:2,c:13,f:1,cat:"Grains"},
+  {n:"Bread Whole Wheat (1 slice)",cal:81,p:4,c:14,f:1,cat:"Grains"},{n:"Bagel (1 medium)",cal:245,p:9,c:48,f:1,cat:"Grains"},
+  {n:"English Muffin",cal:132,p:5,c:26,f:1,cat:"Grains"},{n:"Tortilla Flour (10in)",cal:218,p:6,c:36,f:5,cat:"Grains"},
+  {n:"Tortilla Corn (6in)",cal:52,p:1,c:11,f:1,cat:"Grains"},{n:"Sweet Potato (1 medium)",cal:103,p:2,c:24,f:0,cat:"Grains"},
+  {n:"Potato (1 medium)",cal:161,p:4,c:37,f:0,cat:"Grains"},{n:"Granola (1/2 cup)",cal:210,p:5,c:30,f:8,cat:"Grains"},
+  // Fruits
+  {n:"Banana (1 medium)",cal:105,p:1,c:27,f:0,cat:"Fruits"},{n:"Apple (1 medium)",cal:95,p:0,c:25,f:0,cat:"Fruits"},
+  {n:"Orange (1 medium)",cal:62,p:1,c:15,f:0,cat:"Fruits"},{n:"Strawberries (1 cup)",cal:49,p:1,c:12,f:0,cat:"Fruits"},
+  {n:"Blueberries (1 cup)",cal:84,p:1,c:21,f:0,cat:"Fruits"},{n:"Grapes (1 cup)",cal:104,p:1,c:27,f:0,cat:"Fruits"},
+  {n:"Watermelon (1 cup)",cal:46,p:1,c:12,f:0,cat:"Fruits"},{n:"Mango (1 cup)",cal:99,p:1,c:25,f:1,cat:"Fruits"},
+  {n:"Pineapple (1 cup)",cal:82,p:1,c:22,f:0,cat:"Fruits"},{n:"Avocado (1/2)",cal:120,p:1,c:6,f:11,cat:"Fruits"},
+  {n:"Raspberries (1 cup)",cal:64,p:1,c:15,f:1,cat:"Fruits"},{n:"Peach (1 medium)",cal:59,p:1,c:14,f:0,cat:"Fruits"},
+  // Veggies
+  {n:"Broccoli (1 cup)",cal:55,p:4,c:11,f:1,cat:"Veggies"},{n:"Spinach (2 cups raw)",cal:14,p:2,c:2,f:0,cat:"Veggies"},
+  {n:"Carrots (1 cup)",cal:52,p:1,c:12,f:0,cat:"Veggies"},{n:"Bell Pepper (1 medium)",cal:31,p:1,c:6,f:0,cat:"Veggies"},
+  {n:"Asparagus (6 spears)",cal:20,p:2,c:4,f:0,cat:"Veggies"},{n:"Green Beans (1 cup)",cal:31,p:2,c:7,f:0,cat:"Veggies"},
+  {n:"Zucchini (1 medium)",cal:33,p:2,c:6,f:1,cat:"Veggies"},{n:"Cauliflower (1 cup)",cal:27,p:2,c:5,f:0,cat:"Veggies"},
+  {n:"Corn (1 ear)",cal:88,p:3,c:19,f:1,cat:"Veggies"},{n:"Mushrooms (1 cup)",cal:15,p:2,c:2,f:0,cat:"Veggies"},
+  // Nuts
+  {n:"Almonds (1oz)",cal:164,p:6,c:6,f:14,cat:"Nuts"},{n:"Peanuts (1oz)",cal:161,p:7,c:5,f:14,cat:"Nuts"},
+  {n:"Cashews (1oz)",cal:157,p:5,c:9,f:12,cat:"Nuts"},{n:"Walnuts (1oz)",cal:185,p:4,c:4,f:18,cat:"Nuts"},
+  {n:"Peanut Butter (2 tbsp)",cal:188,p:8,c:6,f:16,cat:"Nuts"},{n:"Almond Butter (2 tbsp)",cal:196,p:7,c:6,f:18,cat:"Nuts"},
+  {n:"Trail Mix (1/4 cup)",cal:173,p:5,c:16,f:11,cat:"Nuts"},{n:"Chia Seeds (2 tbsp)",cal:140,p:5,c:12,f:9,cat:"Nuts"},
+  // Snacks
+  {n:"Protein Bar (avg)",cal:230,p:20,c:25,f:8,cat:"Snacks"},{n:"Granola Bar",cal:140,p:3,c:23,f:5,cat:"Snacks"},
+  {n:"Rice Cakes (2)",cal:70,p:2,c:15,f:0,cat:"Snacks"},{n:"Chips (1oz)",cal:152,p:2,c:15,f:10,cat:"Snacks"},
+  {n:"Popcorn (3 cups air)",cal:93,p:3,c:19,f:1,cat:"Snacks"},{n:"Dark Chocolate (1oz)",cal:170,p:2,c:13,f:12,cat:"Snacks"},
+  {n:"Hummus (2 tbsp)",cal:50,p:2,c:4,f:3,cat:"Snacks"},{n:"Pretzels (1oz)",cal:108,p:3,c:23,f:1,cat:"Snacks"},
+  // Drinks
+  {n:"Black Coffee",cal:2,p:0,c:0,f:0,cat:"Drinks"},{n:"Coffee w/ Cream & Sugar",cal:80,p:1,c:10,f:4,cat:"Drinks"},
+  {n:"Latte (16oz)",cal:190,p:10,c:18,f:7,cat:"Drinks"},{n:"Orange Juice (8oz)",cal:112,p:2,c:26,f:0,cat:"Drinks"},
+  {n:"Protein Shake",cal:200,p:30,c:12,f:4,cat:"Drinks"},{n:"Smoothie Fruit (16oz)",cal:260,p:4,c:60,f:2,cat:"Drinks"},
+  {n:"Gatorade (20oz)",cal:140,p:0,c:36,f:0,cat:"Drinks"},{n:"Soda (12oz)",cal:140,p:0,c:39,f:0,cat:"Drinks"},
+  {n:"Diet Soda (12oz)",cal:0,p:0,c:0,f:0,cat:"Drinks"},{n:"Beer (12oz)",cal:153,p:2,c:13,f:0,cat:"Drinks"},
+  {n:"Wine Red (5oz)",cal:125,p:0,c:4,f:0,cat:"Drinks"},
+  // Meals / Fast Food
+  {n:"Chipotle Chicken Bowl",cal:665,p:49,c:41,f:24,cat:"Meals"},{n:"Chipotle Burrito",cal:1010,p:56,c:108,f:37,cat:"Meals"},
+  {n:"Chick-fil-A Sandwich",cal:440,p:28,c:40,f:19,cat:"Meals"},{n:"Chick-fil-A Nuggets (12)",cal:380,p:40,c:14,f:18,cat:"Meals"},
+  {n:"Big Mac",cal:550,p:25,c:45,f:30,cat:"Meals"},{n:"McChicken",cal:400,p:14,c:40,f:21,cat:"Meals"},
+  {n:"Subway 6\" Turkey",cal:280,p:18,c:40,f:4,cat:"Meals"},{n:"Pizza Slice (cheese)",cal:285,p:12,c:36,f:10,cat:"Meals"},
+  {n:"Pizza Slice (pepperoni)",cal:313,p:13,c:35,f:13,cat:"Meals"},{n:"Burger (homemade)",cal:450,p:28,c:30,f:24,cat:"Meals"},
+  {n:"Grilled Chicken Salad",cal:350,p:35,c:12,f:18,cat:"Meals"},{n:"Spaghetti & Meatballs",cal:520,p:25,c:55,f:21,cat:"Meals"},
+  {n:"Stir Fry Chicken & Rice",cal:480,p:32,c:52,f:14,cat:"Meals"},{n:"Tacos (3 beef)",cal:510,p:24,c:42,f:27,cat:"Meals"},
+  {n:"Pad Thai",cal:540,p:20,c:62,f:22,cat:"Meals"},{n:"Fried Rice Chicken",cal:450,p:18,c:58,f:16,cat:"Meals"},
+  {n:"Caesar Salad w/ Chicken",cal:390,p:32,c:14,f:24,cat:"Meals"},{n:"Poke Bowl Salmon",cal:520,p:35,c:48,f:18,cat:"Meals"},
+  // Sauces
+  {n:"Olive Oil (1 tbsp)",cal:119,p:0,c:0,f:14,cat:"Sauces"},{n:"Ketchup (1 tbsp)",cal:20,p:0,c:5,f:0,cat:"Sauces"},
+  {n:"Mayo (1 tbsp)",cal:94,p:0,c:0,f:10,cat:"Sauces"},{n:"Ranch (2 tbsp)",cal:129,p:0,c:2,f:13,cat:"Sauces"},
+  {n:"BBQ Sauce (2 tbsp)",cal:70,p:0,c:17,f:0,cat:"Sauces"},{n:"Honey (1 tbsp)",cal:64,p:0,c:17,f:0,cat:"Sauces"},
+  {n:"Hot Sauce (1 tsp)",cal:1,p:0,c:0,f:0,cat:"Sauces"},{n:"Soy Sauce (1 tbsp)",cal:9,p:1,c:1,f:0,cat:"Sauces"},
+  // Legumes
+  {n:"Black Beans (1/2 cup)",cal:114,p:8,c:20,f:0,cat:"Legumes"},{n:"Chickpeas (1/2 cup)",cal:134,p:7,c:22,f:2,cat:"Legumes"},
+  {n:"Lentils (1/2 cup)",cal:115,p:9,c:20,f:0,cat:"Legumes"},{n:"Edamame (1/2 cup)",cal:95,p:9,c:7,f:4,cat:"Legumes"},
+];
+const FOOD_CATS=["All",...new Set(FOODS.map(f=>f.cat))];
+
+// ─── Workout Templates ───
+const TEMPLATES=[
+  {name:"Push (PPL)",desc:"Chest, Shoulders, Triceps",exs:["bench","incbench","dbflye","ohp","lateralraise","tricep","skullcrusher"]},
+  {name:"Pull (PPL)",desc:"Back, Biceps, Rear Delts",exs:["deadlift","pullup","cablerow","latpull","facepull","curl","hammercurl"]},
+  {name:"Legs (PPL)",desc:"Quads, Hams, Glutes, Calves",exs:["squat","legpress","bss","hamcurl","hipthrust","calfraise"]},
+  {name:"Chest Day",desc:"Full chest session",exs:["bench","incbench","dbbench","flye","pecfly","dip"]},
+  {name:"Back Day",desc:"Full back session",exs:["deadlift","row","pullup","latpull","cablerow","dbrow"]},
+  {name:"Shoulder Day",desc:"Delts & traps",exs:["ohp","dbohp","lateralraise","facepull","reardelt","shrug"]},
+  {name:"Arm Day",desc:"Biceps & Triceps",exs:["curl","hammercurl","preacher","tricep","skullcrusher","ohtriext"]},
+  {name:"Upper Body",desc:"Chest, back, shoulders, arms",exs:["bench","row","ohp","latpull","curl","tricep"]},
+  {name:"Lower Body",desc:"Quads, hams, glutes",exs:["squat","rdl","legpress","hamcurl","hipthrust","calfraise"]},
+  {name:"Full Body",desc:"Hit everything",exs:["squat","bench","row","ohp","curl","hangleg"]},
+];
+
+// ─── Demo data ───
+function genDemo(){
+  const w=[],n=[],b=[];
+  const pool=["bench","squat","deadlift","ohp","row","pullup","curl","tricep","legpress","latpull"];
+  for(let i=30;i>=0;i--){
+    const d=ago(i);
+    if(i%7!==0&&i%7!==3){
+      const ne=3+Math.floor(Math.random()*3);
+      const sh=[...pool].sort(()=>Math.random()-0.5).slice(0,ne);
+      const exs=sh.map(eid=>{
+        const bw={bench:185,squat:275,deadlift:315,ohp:135,row:185,pullup:0,curl:35,tricep:50,legpress:400,latpull:150}[eid]||100;
+        const p=(30-i)*0.5;
+        return{exerciseId:eid,sets:Array.from({length:3+Math.floor(Math.random()*2)},()=>({
+          weight:Math.round(bw+p+(Math.random()*10-5)),reps:6+Math.floor(Math.random()*7),rpe:7+Math.floor(Math.random()*3),done:true
+        }))};
+      });
+      w.push({id:uid(),date:d,dur:45+Math.floor(Math.random()*30),exercises:exs,notes:"",rating:3+Math.floor(Math.random()*3)});
+    }
+    const pr=140+Math.floor(Math.random()*60),ca=180+Math.floor(Math.random()*80),fa=55+Math.floor(Math.random()*30);
+    const cal=pr*4+ca*4+fa*9;
+    n.push({id:uid(),date:d,cal,protein:pr,carbs:ca,fat:fa,fiber:20+Math.floor(Math.random()*15),water:6+Math.floor(Math.random()*6),
+      sleep:6+Math.random()*2.5,
+      meals:[{name:"Breakfast",cal:Math.round(cal*.25),protein:Math.round(pr*.25),items:[]},{name:"Lunch",cal:Math.round(cal*.35),protein:Math.round(pr*.35),items:[]},
+        {name:"Dinner",cal:Math.round(cal*.3),protein:Math.round(pr*.3),items:[]},{name:"Snacks",cal:Math.round(cal*.1),protein:Math.round(pr*.1),items:[]}]});
+    if(i%3===0||i%7===0){
+      b.push({id:uid(),date:d,weight:182-(30-i)*.15+Math.random()*2-1,bf:18-(30-i)*.05+Math.random()*.5,
+        chest:42+(30-i)*.02,waist:34-(30-i)*.03,arms:15.5+(30-i)*.015,thighs:24+(30-i)*.01});
+    }
+  }
+  return{workouts:w,nutrition:n,body:b};
+}
+
+// ─── State ───
+// schedule.weekly = {0:"Rest",1:"Chest",2:"Back",...} (day-of-week 0=Sun)
+// schedule.overrides = {"2026-03-05":"Legs",...} (specific date overrides)
+const defaultSchedule = {
+  weekly:{0:"Rest",1:"Chest",2:"Back",3:"Legs",4:"Shoulders",5:"Arms",6:"Cardio"},
+  overrides:{}
+};
+const init={tab:"home",workouts:[],nutrition:[],body:[],exercises:defaultExercises,
+  goals:{cal:2400,protein:180,carbs:250,fat:70,goalWeight:175},schedule:defaultSchedule,range:30,loaded:false,modal:null};
+
+function reducer(s,a){
+  switch(a.type){
+    case "INIT": return{...s,...a.p,loaded:true};
+    case "TAB": return{...s,tab:a.tab};
+    case "RANGE": return{...s,range:a.d};
+    case "MODAL": return{...s,modal:a.modal};
+    case "ADD_W": return{...s,workouts:[a.w,...s.workouts].sort((a,b)=>b.date.localeCompare(a.date))};
+    case "DEL_W": return{...s,workouts:s.workouts.filter(w=>w.id!==a.id)};
+    case "ADD_N": return{...s,nutrition:[...s.nutrition.filter(n=>n.date!==a.n.date),a.n].sort((a,b)=>b.date.localeCompare(a.date))};
+    case "DEL_N": return{...s,nutrition:s.nutrition.filter(n=>n.id!==a.id)};
+    case "ADD_B": return{...s,body:[a.b,...s.body].sort((a,b)=>b.date.localeCompare(a.date))};
+    case "DEL_B": return{...s,body:s.body.filter(b=>b.id!==a.id)};
+    case "GOALS": return{...s,goals:{...s.goals,...a.g}};
+    case "ADD_EX": return{...s,exercises:[...s.exercises,a.ex]};
+    case "SET_WEEKLY": return{...s,schedule:{...s.schedule,weekly:{...s.schedule.weekly,[a.day]:a.label}}};
+    case "SET_OVERRIDE": {
+      const ov={...s.schedule.overrides};
+      if(a.label)ov[a.date]=a.label; else delete ov[a.date];
+      return{...s,schedule:{...s.schedule,overrides:ov}};
+    }
+    case "SET_SCHEDULE": return{...s,schedule:a.schedule};
+    default: return s;
+  }
+}
+
+// ─── CSS Variables & Styles ───
+const V = {
+  bg: "#08080d", card: "rgba(255,255,255,0.035)", cardBorder: "rgba(255,255,255,0.06)",
+  accent: "#00f5a0", accent2: "#00d9f5", warn: "#ff9f43", danger: "#ff6b6b", purple: "#a78bfa",
+  text: "#e8e8ec", text2: "#8b8b9e", text3: "#4a4a5c", font: "'Outfit', sans-serif", mono: "'JetBrains Mono', monospace",
+};
+
+// ─── Shared Mobile Components ───
+const Card = ({children, style:s={}, onClick, glow}) => (
+  <div onClick={onClick} style={{background:glow?`${V.accent}08`:V.card,border:`1px solid ${glow?`${V.accent}25`:V.cardBorder}`,
+    borderRadius:16,padding:16,transition:"all .2s",...(onClick?{cursor:"pointer",WebkitTapHighlightColor:"transparent"}:{}),...s}}>
+    {children}
+  </div>
+);
+
+const Btn = ({children,v="primary",full,disabled,onClick,s:extra={}}) => {
+  const base = {display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderRadius:12,border:"none",
+    fontSize:14,fontWeight:600,fontFamily:V.font,cursor:disabled?"default":"pointer",opacity:disabled?.4:1,
+    WebkitTapHighlightColor:"transparent",transition:"all .15s",minHeight:44,...(full?{width:"100%"}:{}),...extra};
+  const vars = {
+    primary:{...base,background:`linear-gradient(135deg,${V.accent},${V.accent2})`,color:V.bg,padding:"12px 20px"},
+    secondary:{...base,background:"rgba(255,255,255,0.06)",color:V.text2,padding:"12px 20px",border:`1px solid ${V.cardBorder}`},
+    danger:{...base,background:"rgba(255,107,107,0.12)",color:V.danger,padding:"12px 20px"},
+    ghost:{...base,background:"transparent",color:V.text2,padding:"8px 12px"},
+    small:{...base,background:`${V.accent}15`,color:V.accent,padding:"8px 14px",fontSize:12,borderRadius:10,minHeight:36},
+  };
+  return <button onClick={disabled?undefined:onClick} style={vars[v]||vars.primary}>{children}</button>;
+};
+
+const Field = ({label,value,onChange,type="text",unit,placeholder,min,max,step,autoFocus}) => (
+  <div style={{marginBottom:12}}>
+    {label&&<div style={{fontSize:11,color:V.text3,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6,fontWeight:600}}>{label}</div>}
+    <div style={{position:"relative"}}>
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        min={min} max={max} step={step} autoFocus={autoFocus}
+        style={{width:"100%",padding:"12px 14px",paddingRight:unit?44:14,background:"rgba(255,255,255,0.04)",
+          border:`1px solid ${V.cardBorder}`,borderRadius:12,color:V.text,fontSize:16,fontFamily:V.mono,
+          outline:"none",boxSizing:"border-box",WebkitAppearance:"none",minHeight:44}} />
+      {unit&&<span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",fontSize:11,color:V.text3}}>{unit}</span>}
+    </div>
+  </div>
+);
+
+const Progress = ({val,max,color=V.accent,h=6}) => (
+  <div style={{width:"100%",height:h,background:"rgba(255,255,255,0.05)",borderRadius:h,overflow:"hidden"}}>
+    <div style={{width:`${Math.min(100,(val/max)*100)}%`,height:"100%",
+      background:val>max?V.danger:`linear-gradient(90deg,${color},${color}bb)`,borderRadius:h,transition:"width .4s ease"}}/>
+  </div>
+);
+
+const Sheet = ({title,onClose,children}) => (
+  <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.65)",backdropFilter:"blur(6px)"}} onClick={onClose}/>
+    <div style={{position:"relative",background:"linear-gradient(180deg,#1a1a28,#0e0e16)",borderRadius:"20px 20px 0 0",
+      maxHeight:"92vh",display:"flex",flexDirection:"column",paddingBottom:"env(safe-area-inset-bottom, 20px)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",
+        borderBottom:`1px solid ${V.cardBorder}`}}>
+        <h3 style={{margin:0,fontSize:17,color:V.text,fontFamily:V.font,fontWeight:700}}>{title}</h3>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,
+          width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+          {Icons.x({size:16,color:V.text2})}
+        </button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:20}}>{children}</div>
+    </div>
+  </div>
+);
+
+const Chip = ({label,active,onClick,color}) => (
+  <button onClick={onClick} style={{padding:"7px 14px",borderRadius:20,border:"none",fontSize:12,fontWeight:600,
+    fontFamily:V.font,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"all .15s",
+    background:active?`${color||V.accent}18`:"rgba(255,255,255,0.04)",
+    color:active?(color||V.accent):V.text3}}>
+    {label}
+  </button>
+);
+
+const Stat = ({icon,label,value,unit,color=V.accent,sub}) => (
+  <Card>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:38,height:38,borderRadius:11,background:`${color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        {icon({size:17,color})}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:10,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",fontWeight:600}}>{label}</div>
+        <div style={{fontSize:22,fontWeight:700,color:V.text,fontFamily:V.mono,lineHeight:1.2}}>
+          {value}<span style={{fontSize:11,color:V.text3,marginLeft:3}}>{unit}</span>
+        </div>
+        {sub&&<div style={{fontSize:10,color:V.text3,marginTop:1}}>{sub}</div>}
+      </div>
+    </div>
+  </Card>
+);
+
+const chartCfg = {
+  grid:{stroke:"rgba(255,255,255,0.04)"},
+  axis:{stroke:"transparent",fontSize:9,fill:V.text3,tickLine:false,axisLine:false},
+  tip:{contentStyle:{background:"#1a1a28",border:`1px solid ${V.cardBorder}`,borderRadius:10,fontSize:11,color:V.text2,fontFamily:V.font,padding:"8px 12px"},cursor:{stroke:V.accent,strokeWidth:1,strokeDasharray:"4 4"}},
+};
+
+// ─── YouTube Button ───
+const YTBtn=({yt,size=22})=>yt?(
+  <a href={`https://www.youtube.com/watch?v=${yt}`} target="_blank" rel="noopener noreferrer"
+    style={{width:size,height:size,borderRadius:size/3,background:"rgba(255,0,0,0.10)",
+      display:"inline-flex",alignItems:"center",justifyContent:"center",textDecoration:"none",
+      WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+    {Icons.play({size:size/2.5,color:"#ff4444"})}</a>
+):null;
+
+// ─── Rest Timer ───
+function RestTimer(){
+  const [active,setActive]=useState(false);
+  const [secs,setSecs]=useState(90);
+  const [rem,setRem]=useState(90);
+  const iRef=useRef(null);
+  const start=()=>{setRem(secs);setActive(true);};
+  const stop=()=>{setActive(false);clearInterval(iRef.current);};
+  useEffect(()=>{
+    if(active&&rem>0){
+      iRef.current=setInterval(()=>setRem(r=>{if(r<=1){setActive(false);try{navigator.vibrate?.(200);}catch(e){}return 0;}return r-1;}),1000);
+      return()=>clearInterval(iRef.current);
+    }
+  },[active,rem]);
+  const pct=active?(rem/secs)*100:100;
+  return(
+    <div style={{padding:"8px 0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{position:"relative",width:48,height:48}}>
+          <svg width={48} height={48} style={{transform:"rotate(-90deg)"}}>
+            <circle cx={24} cy={24} r={20} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={3}/>
+            <circle cx={24} cy={24} r={20} fill="none" stroke={rem===0?"#ff6b6b":V.accent} strokeWidth={3}
+              strokeDasharray={`${pct*1.257} ${125.7}`} strokeLinecap="round" style={{transition:"stroke-dasharray .3s"}}/>
+          </svg>
+          <span style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:12,fontWeight:700,color:rem===0?V.danger:V.text,fontFamily:V.mono}}>{fmtTimer(active?rem:secs)}</span>
+        </div>
+        <div style={{display:"flex",gap:5}}>
+          {[60,90,120,180].map(s=>(
+            <button key={s} onClick={()=>{setSecs(s);if(!active)setRem(s);}}
+              style={{padding:"6px 10px",borderRadius:8,border:"none",fontSize:10,fontWeight:700,fontFamily:V.font,
+                background:secs===s?`${V.accent}15`:"rgba(255,255,255,0.04)",color:secs===s?V.accent:V.text3,
+                cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>{s}s</button>
+          ))}
+        </div>
+        <button onClick={active?stop:start} style={{marginLeft:"auto",width:40,height:40,borderRadius:12,border:"none",
+          background:active?"rgba(255,107,107,0.15)":`${V.accent}15`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+          WebkitTapHighlightColor:"transparent"}}>
+          {active?Icons.pause({size:16,color:V.danger}):Icons.play({size:16,color:V.accent})}
+        </button>
+      </div>
+      {rem===0&&!active&&<div style={{marginTop:6,fontSize:12,fontWeight:700,color:V.danger,textAlign:"center"}}>REST COMPLETE — GO!</div>}
+    </div>
+  );
+}
+
+// ─── Food Search ───
+function FoodSearch({onAdd}){
+  const [q,setQ]=useState("");
+  const [cat,setCat]=useState("All");
+  const [qty,setQty]=useState({});
+  const results=useMemo(()=>{
+    if(!q&&cat==="All")return FOODS.slice(0,20);
+    return FOODS.filter(f=>{const mc=cat==="All"||f.cat===cat;const mq=!q||f.n.toLowerCase().includes(q.toLowerCase());return mc&&mq;}).slice(0,30);
+  },[q,cat]);
+  const addItem=(food)=>{
+    const m=parseFloat(qty[food.n])||1;
+    onAdd({name:food.n,cal:Math.round(food.cal*m),protein:Math.round(food.p*m),carbs:Math.round(food.c*m),fat:Math.round(food.f*m)});
+    setQty(r=>({...r,[food.n]:""}));
+  };
+  return(
+    <div>
+      <div style={{position:"relative",marginBottom:10}}>
+        <div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)"}}>{Icons.search({size:16,color:V.text3})}</div>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search 500+ foods..."
+          style={{width:"100%",padding:"12px 14px 12px 38px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+            borderRadius:12,color:V.text,fontSize:14,outline:"none",boxSizing:"border-box",minHeight:44,fontFamily:V.font}}/>
+      </div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
+        {FOOD_CATS.map(c=><Chip key={c} label={c} active={cat===c} onClick={()=>setCat(c)}/>)}
+      </div>
+      <div style={{maxHeight:280,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        {results.map((food,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,color:V.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.n}</div>
+              <div style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>
+                <span style={{color:V.warn}}>{food.cal}</span> · <span style={{color:V.accent}}>{food.p}P</span> · <span style={{color:V.accent2}}>{food.c}C</span> · <span style={{color:V.warn}}>{food.f}F</span>
+              </div>
+            </div>
+            <input type="number" inputMode="decimal" value={qty[food.n]||""} onChange={e=>setQty(q=>({...q,[food.n]:e.target.value}))}
+              placeholder="1" step="0.5" style={{width:44,padding:"6px 4px",background:"rgba(255,255,255,0.04)",
+                border:`1px solid ${V.cardBorder}`,borderRadius:8,color:V.text,fontSize:12,fontFamily:V.mono,textAlign:"center",outline:"none"}}/>
+            <button onClick={()=>addItem(food)} style={{width:36,height:36,borderRadius:10,background:`${V.accent}15`,
+              border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>
+              {Icons.plus({size:14,color:V.accent})}</button>
+          </div>
+        ))}
+        {results.length===0&&<div style={{textAlign:"center",padding:20,color:V.text3,fontSize:13}}>No results</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Plate Calculator ───
+function PlateCalc(){
+  const [w,setW]=useState("");
+  const plates=w?calcPlates(parseFloat(w)):null;
+  return(
+    <div>
+      <Field label="Target Weight" type="number" value={w} onChange={setW} unit="lbs" placeholder="225"/>
+      {plates&&<div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"center",padding:"10px 0"}}>
+        <div style={{fontSize:10,color:V.text3}}>Each side:</div>
+        {plates.map((p,i)=>(
+          <div key={i} style={{padding:"6px 10px",borderRadius:8,fontSize:13,fontWeight:700,fontFamily:V.mono,
+            background:p>=45?`${V.accent}18`:p>=25?`${V.accent2}15`:p>=10?`${V.purple}15`:`${V.warn}15`,
+            color:p>=45?V.accent:p>=25?V.accent2:p>=10?V.purple:V.warn}}>{p}</div>))}
+      </div>}
+      {w&&parseFloat(w)>45&&!plates&&<div style={{fontSize:12,color:V.danger,textAlign:"center",padding:8}}>Can't be loaded evenly</div>}
+      {w&&parseFloat(w)<=45&&<div style={{fontSize:12,color:V.text3,textAlign:"center",padding:8}}>Just the bar (45 lbs)</div>}
+    </div>
+  );
+}
+
+// ─── Hooks ───
+function useStreak(workouts){
+  return useMemo(()=>{
+    let streak=0;const d=new Date();
+    if(!workouts.find(w=>w.date===today()))d.setDate(d.getDate()-1);
+    while(true){const ds=d.toISOString().split("T")[0];
+      if(workouts.find(w=>w.date===ds)){streak++;d.setDate(d.getDate()-1);}else break;}
+    return streak;
+  },[workouts]);
+}
+function usePRs(workouts,exercises){
+  return useMemo(()=>{
+    const prs={};
+    workouts.forEach(w=>w.exercises.forEach(ex=>{
+      const name=exercises.find(e=>e.id===ex.exerciseId)?.name||ex.exerciseId;
+      ex.sets.forEach(s=>{const e1rm=calc1RM(s.weight,s.reps);
+        if(s.weight>0&&(!prs[ex.exerciseId]||e1rm>prs[ex.exerciseId].e1rm))
+          prs[ex.exerciseId]={weight:s.weight,reps:s.reps,e1rm,date:w.date,name};
+      });
+    }));
+    return prs;
+  },[workouts,exercises]);
+}
+
+// ═══════════════════════════════════════
+//  HOME TAB
+// ═══════════════════════════════════════
+function HomeTab({s,d}){
+  const td=today();
+  const streak=useStreak(s.workouts);
+  const prs=usePRs(s.workouts,s.exercises);
+  const tn=s.nutrition.find(n=>n.date===td);
+  const ww=s.workouts.filter(w=>w.date>=ago(7)).length;
+  const vol=s.workouts.filter(w=>w.date>=ago(7)).reduce((sum,w)=>sum+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
+  const dow=new Date().getDay();
+  const todayType=s.schedule.overrides[td]||s.schedule.weekly[dow]||"Rest";
+
+  const strengthData=useMemo(()=>{
+    const map={};
+    s.workouts.filter(w=>w.date>=ago(s.range)).sort((a,b)=>a.date.localeCompare(b.date)).forEach(w=>{
+      w.exercises.forEach(ex=>{
+        if(["bench","squat","deadlift"].includes(ex.exerciseId)){
+          const mx=Math.max(...ex.sets.map(st=>st.weight));
+          if(!map[w.date])map[w.date]={date:fmtShort(w.date)};
+          map[w.date][ex.exerciseId]=mx;
+        }
+      });
+    });
+    return Object.values(map);
+  },[s.workouts,s.range]);
+
+  const calData=useMemo(()=>
+    s.nutrition.filter(n=>n.date>=ago(s.range)).sort((a,b)=>a.date.localeCompare(b.date))
+      .map(n=>({date:fmtShort(n.date),cal:n.cal,target:s.goals.cal}))
+  ,[s.nutrition,s.range,s.goals.cal]);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
+      {/* Today's Plan + Streak */}
+      <Card glow={todayType!=="Rest"} style={{padding:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:10,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em"}}>Today's Plan</div>
+            <div style={{fontSize:20,fontWeight:800,color:WORKOUT_TYPES_COLORS[todayType]||V.text,marginTop:2}}>{todayType}</div>
+          </div>
+          {streak>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:10,background:"rgba(255,159,67,0.12)"}}>
+              {Icons.flame({size:14,color:V.warn})}
+              <span style={{fontSize:14,fontWeight:800,color:V.warn,fontFamily:V.mono}}>{streak}</span>
+              <span style={{fontSize:9,color:V.warn}}>day{streak>1?"s":""}</span>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Stat icon={Icons.dumbbell} label="This Week" value={ww} unit="sessions" color={V.accent}/>
+        <Stat icon={Icons.zap} label="Volume" value={vol>1000?`${(vol/1000).toFixed(1)}k`:vol} unit="lbs" color={V.accent2}/>
+      </div>
+
+      {/* Today's Nutrition */}
+      {tn ? (
+        <Card>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Today's Intake</span>
+            <span style={{fontSize:20,fontWeight:700,color:V.warn,fontFamily:V.mono}}>{tn.cal}<span style={{fontSize:11,color:V.text3}}> kcal</span></span>
+          </div>
+          <Progress val={tn.cal} max={s.goals.cal} color={V.warn} h={8}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:14}}>
+            {[{l:"Protein",v:tn.protein,g:s.goals.protein,c:V.accent},{l:"Carbs",v:tn.carbs,g:s.goals.carbs,c:V.accent2},{l:"Fat",v:tn.fat,g:s.goals.fat,c:V.warn}].map(m=>(
+              <div key={m.l}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{fontSize:10,color:m.c,fontWeight:600}}>{m.l}</span>
+                  <span style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>{m.v}/{m.g}</span>
+                </div>
+                <Progress val={m.v} max={m.g} color={m.c} h={5}/>
+              </div>
+            ))}
+          </div>
+          {tn.water>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10}}>
+              {Icons.droplet({size:14,color:V.accent2})}
+              <div style={{flex:1,display:"flex",gap:3}}>
+                {Array.from({length:8}).map((_,i)=>(
+                  <div key={i} style={{flex:1,height:12,borderRadius:3,
+                    background:i<tn.water?`${V.accent2}40`:"rgba(255,255,255,0.04)",transition:"all .3s"}}/>
+                ))}
+              </div>
+              <span style={{fontSize:11,color:V.accent2,fontFamily:V.mono,fontWeight:600}}>{tn.water}/8</span>
+            </div>
+          )}
+          {tn.sleep>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}>
+              {Icons.moon({size:14,color:V.purple})}
+              <span style={{fontSize:11,color:V.purple,fontWeight:600}}>{tn.sleep.toFixed(1)} hrs sleep</span>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card onClick={()=>d({type:"TAB",tab:"nutrition"})}>
+          <div style={{textAlign:"center",padding:"12px 0",color:V.text3,fontSize:13}}>Tap to log today's nutrition</div>
+        </Card>
+      )}
+
+      {/* Strength Chart */}
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Strength</span>
+          <div style={{display:"flex",gap:8}}>
+            {[{id:"bench",c:V.accent,l:"B"},{id:"squat",c:V.accent2,l:"S"},{id:"deadlift",c:V.purple,l:"D"}].map(e=>(
+              <span key={e.id} style={{fontSize:9,color:e.c,display:"flex",alignItems:"center",gap:3,fontWeight:700}}>
+                <span style={{width:6,height:3,background:e.c,borderRadius:1}}/>{e.l}</span>
+            ))}
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={150}>
+          <LineChart data={strengthData}>
+            <CartesianGrid {...chartCfg.grid} vertical={false}/>
+            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+            <YAxis {...chartCfg.axis} width={30}/>
+            <Tooltip {...chartCfg.tip}/>
+            <Line type="monotone" dataKey="bench" stroke={V.accent} strokeWidth={2} dot={{r:2.5}}/>
+            <Line type="monotone" dataKey="squat" stroke={V.accent2} strokeWidth={2} dot={{r:2.5}}/>
+            <Line type="monotone" dataKey="deadlift" stroke={V.purple} strokeWidth={2} dot={{r:2.5}}/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* PR Wall */}
+      {Object.keys(prs).length>0&&(
+        <Card>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+            {Icons.trophy({size:15,color:V.warn})}
+            <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Personal Records</span>
+          </div>
+          {Object.entries(prs).sort((a,b)=>b[1].e1rm-a[1].e1rm).slice(0,5).map(([id,pr])=>(
+            <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+              <span style={{fontSize:12,color:V.text}}>{pr.name}</span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:12,color:V.accent,fontFamily:V.mono,fontWeight:700}}>{pr.weight}×{pr.reps}</span>
+                <span style={{fontSize:10,color:V.text3}}>E1RM: {pr.e1rm}</span>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Cal Chart */}
+      <Card>
+        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:12}}>Calories</span>
+        <ResponsiveContainer width="100%" height={130}>
+          <BarChart data={calData} barSize={8}>
+            <CartesianGrid {...chartCfg.grid} vertical={false}/>
+            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+            <YAxis {...chartCfg.axis} width={30}/>
+            <Tooltip {...chartCfg.tip}/>
+            <Bar dataKey="cal" fill={V.warn} radius={[4,4,0,0]} opacity={0.8}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* Recent */}
+      <div style={{fontSize:13,color:V.text2,fontWeight:600,marginTop:4}}>Recent</div>
+      {s.workouts.slice(0,4).map(w=>{
+        const names=w.exercises.map(e=>s.exercises.find(x=>x.id===e.exerciseId)?.name||e.exerciseId);
+        const sets=w.exercises.reduce((n,e)=>n+e.sets.length,0);
+        return(
+          <Card key={w.id} style={{padding:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:10,background:`${V.accent}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {Icons.dumbbell({size:16,color:V.accent})}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,color:V.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{names.join(", ")}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,color:V.text3}}>{fmtShort(w.date)} · {sets}s · {w.dur}min</span>
+                  {w.rating&&<span style={{fontSize:8,color:V.warn}}>{Array.from({length:w.rating}).map((_,i)=>"★").join("")}</span>}
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+      {s.workouts.length===0&&<div style={{textAlign:"center",padding:24,color:V.text3,fontSize:13}}>No workouts yet</div>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+//  WORKOUT TAB
+// ═══════════════════════════════════════
+function WorkoutTab({s,d}){
+  const [show,setShow]=useState(false);
+  const [form,setForm]=useState({date:today(),dur:"",exercises:[],notes:"",rating:3});
+  const [selEx,setSelEx]=useState("");
+  const [catFilter,setCatFilter]=useState("All");
+  const [showTemplates,setShowTemplates]=useState(false);
+  const [showPlates,setShowPlates]=useState(false);
+  const [newPRs,setNewPRs]=useState([]);
+  const cats=["All",...new Set(s.exercises.map(e=>e.cat))];
+  const prs=usePRs(s.workouts,s.exercises);
+
+  const startNew=()=>{setForm({date:today(),dur:"",exercises:[],notes:"",rating:3});setNewPRs([]);setShow(true);};
+  const loadTemplate=(t)=>{
+    setForm(f=>({...f,exercises:t.exs.map(eid=>({exerciseId:eid,sets:[{weight:"",reps:"",rpe:"",done:true}]}))}));
+    setShowTemplates(false);setShow(true);
+  };
+
+  const addEx=()=>{if(!selEx)return;setForm(f=>({...f,exercises:[...f.exercises,{exerciseId:selEx,sets:[{weight:"",reps:"",rpe:"",done:true}]}]}));setSelEx("");};
+  const addSet=(ei)=>{setForm(f=>{const exs=[...f.exercises];const l=exs[ei].sets[exs[ei].sets.length-1];exs[ei]={...exs[ei],sets:[...exs[ei].sets,{weight:l.weight,reps:l.reps,rpe:l.rpe,done:true}]};return{...f,exercises:exs};});};
+  const updSet=(ei,si,k,v)=>{setForm(f=>{const exs=[...f.exercises],sets=[...exs[ei].sets];sets[si]={...sets[si],[k]:v};exs[ei]={...exs[ei],sets};return{...f,exercises:exs};});};
+  const rmSet=(ei,si)=>setForm(f=>{const exs=[...f.exercises];exs[ei]={...exs[ei],sets:exs[ei].sets.filter((_,i)=>i!==si)};return{...f,exercises:exs};});
+  const rmEx=(ei)=>setForm(f=>({...f,exercises:f.exercises.filter((_,i)=>i!==ei)}));
+
+  const save=()=>{
+    const w={id:uid(),date:form.date,dur:parseInt(form.dur)||0,rating:form.rating,
+      exercises:form.exercises.map(e=>({...e,sets:e.sets.map(st=>({weight:parseFloat(st.weight)||0,reps:parseInt(st.reps)||0,rpe:parseFloat(st.rpe)||0,done:st.done}))})),
+      notes:form.notes};
+    // PR detection
+    const detected=[];
+    w.exercises.forEach(ex=>{
+      const name=s.exercises.find(e=>e.id===ex.exerciseId)?.name||ex.exerciseId;
+      ex.sets.forEach(st=>{const e1rm=calc1RM(st.weight,st.reps);const prev=prs[ex.exerciseId];
+        if(st.weight>0&&(!prev||e1rm>prev.e1rm))detected.push({name,weight:st.weight,reps:st.reps,e1rm});});});
+    setNewPRs(detected);d({type:"ADD_W",w});
+    if(detected.length===0)setShow(false);
+  };
+
+  const prevBest=(eid)=>{for(const w of s.workouts){const ex=w.exercises.find(e=>e.exerciseId===eid);
+    if(ex){const b=ex.sets.reduce((m,st)=>st.weight>m.weight?st:m,{weight:0,reps:0});if(b.weight>0)return`${b.weight}×${b.reps}`;}};return null;};
+
+  // PR celebration
+  if(newPRs.length>0){
+    return(
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",gap:20}}>
+        <div style={{fontSize:60}}>🏆</div>
+        <div style={{fontSize:22,fontWeight:800,color:V.warn,textAlign:"center"}}>NEW PR{newPRs.length>1?"s":""}!</div>
+        {newPRs.map((pr,i)=>(
+          <Card key={i} glow style={{width:"100%",textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:700,color:V.text}}>{pr.name}</div>
+            <div style={{fontSize:24,fontWeight:800,color:V.accent,fontFamily:V.mono,marginTop:4}}>{pr.weight} × {pr.reps}</div>
+            <div style={{fontSize:12,color:V.text3,marginTop:2}}>Est. 1RM: {pr.e1rm} lbs</div>
+          </Card>
+        ))}
+        <Btn full onClick={()=>{setNewPRs([]);setShow(false);}}>Done</Btn>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",gap:8}}>
+        <Btn full onClick={startNew}>{Icons.plus({size:16,color:V.bg})} Log Workout</Btn>
+        <Btn v="secondary" onClick={()=>setShowTemplates(true)} s={{flexShrink:0}}>{Icons.copy({size:14,color:V.text2})}</Btn>
+        <Btn v="secondary" onClick={()=>setShowPlates(true)} s={{flexShrink:0}}>{Icons.hash({size:14,color:V.text2})}</Btn>
+      </div>
+
+      {showTemplates&&(
+        <Sheet title="Workout Templates" onClose={()=>setShowTemplates(false)}>
+          {TEMPLATES.map((t,i)=>(
+            <Card key={i} onClick={()=>loadTemplate(t)} style={{marginBottom:8,padding:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:V.text}}>{t.name}</div>
+              <div style={{fontSize:11,color:V.text3,marginTop:2}}>{t.desc}</div>
+              <div style={{fontSize:10,color:V.accent,marginTop:4,fontFamily:V.mono}}>{t.exs.length} exercises</div>
+            </Card>
+          ))}
+        </Sheet>
+      )}
+      {showPlates&&(<Sheet title="Plate Calculator" onClose={()=>setShowPlates(false)}><PlateCalc/></Sheet>)}
+
+      {show&&(
+        <Sheet title="Log Workout" onClose={()=>setShow(false)}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
+            <Field label="Duration" type="number" value={form.dur} onChange={v=>setForm(f=>({...f,dur:v}))} unit="min" placeholder="60"/>
+          </div>
+
+          <RestTimer/>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:V.text3,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6,fontWeight:600}}>Add Exercise</div>
+            <div style={{display:"flex",gap:8}}>
+              <select value={selEx} onChange={e=>setSelEx(e.target.value)}
+                style={{flex:1,padding:"12px 14px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+                  borderRadius:12,color:V.text,fontSize:14,outline:"none",minHeight:44,WebkitAppearance:"none"}}>
+                <option value="" style={{background:"#14141f"}}>Select...</option>
+                {s.exercises.filter(e=>catFilter==="All"||e.cat===catFilter).map(e=>(
+                  <option key={e.id} value={e.id} style={{background:"#14141f"}}>{e.name}</option>
+                ))}
+              </select>
+              {selEx&&(()=>{const yt=s.exercises.find(e=>e.id===selEx)?.yt;return yt?<YTBtn yt={yt} size={44}/>:null;})()}
+              <Btn v="small" onClick={addEx} s={{minHeight:44,padding:"0 14px"}}>{Icons.plus({size:16,color:V.accent})}</Btn>
+            </div>
+            <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{cats.map(c=><Chip key={c} label={c} active={catFilter===c} onClick={()=>setCatFilter(c)}/>)}</div>
+          </div>
+
+          {form.exercises.map((ex,ei)=>{
+            const info=s.exercises.find(e=>e.id===ex.exerciseId);
+            const pb=prevBest(ex.exerciseId);
+            return(
+              <div key={ei} style={{marginBottom:14,padding:14,background:"rgba(255,255,255,0.02)",borderRadius:14,border:`1px solid ${V.cardBorder}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+                    <span style={{fontSize:14,color:V.text,fontWeight:700}}>{info?.name}</span>
+                    <YTBtn yt={info?.yt} size={24}/>
+                    {pb&&<span style={{fontSize:10,color:V.text3}}>PR:{pb}</span>}
+                  </div>
+                  <button onClick={()=>rmEx(ei)} style={{background:"none",border:"none",padding:8,cursor:"pointer"}}>{Icons.trash({size:14,color:V.text3})}</button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 28px",gap:4,marginBottom:6}}>
+                  <span style={{fontSize:9,color:V.text3,textAlign:"center"}}>#</span>
+                  <span style={{fontSize:9,color:V.text3}}>LBS</span><span style={{fontSize:9,color:V.text3}}>REPS</span>
+                  <span style={{fontSize:9,color:V.text3}}>RPE</span><span/>
+                </div>
+                {ex.sets.map((st,si)=>(
+                  <div key={si} style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 28px",gap:4,marginBottom:4,alignItems:"center"}}>
+                    <span style={{fontSize:12,color:V.text3,textAlign:"center",fontFamily:V.mono}}>{si+1}</span>
+                    {["weight","reps","rpe"].map(k=>(
+                      <input key={k} type="number" inputMode="decimal" value={st[k]} onChange={e=>updSet(ei,si,k,e.target.value)}
+                        placeholder="0" style={{padding:"10px 8px",background:"rgba(255,255,255,0.04)",border:`1px solid rgba(255,255,255,0.05)`,
+                          borderRadius:10,color:V.text,fontSize:15,fontFamily:V.mono,outline:"none",width:"100%",
+                          boxSizing:"border-box",textAlign:"center",minHeight:40,WebkitAppearance:"none"}}/>
+                    ))}
+                    <button onClick={()=>rmSet(ei,si)} disabled={ex.sets.length<=1}
+                      style={{background:"none",border:"none",padding:4,cursor:ex.sets.length<=1?"default":"pointer",opacity:ex.sets.length<=1?.2:1}}>
+                      {Icons.x({size:13,color:V.text3})}</button>
+                  </div>
+                ))}
+                <Btn v="small" onClick={()=>addSet(ei)} s={{marginTop:8,width:"100%"}}>{Icons.plus({size:13,color:V.accent})} Add Set</Btn>
+              </div>
+            );
+          })}
+
+          {/* Rating */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:V.text3,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6,fontWeight:600}}>Workout Rating</div>
+            <div style={{display:"flex",gap:6}}>
+              {[1,2,3,4,5].map(r=>(
+                <button key={r} onClick={()=>setForm(f=>({...f,rating:r}))}
+                  style={{fontSize:22,background:"none",border:"none",cursor:"pointer",padding:4,
+                    color:r<=form.rating?V.warn:V.text3,WebkitTapHighlightColor:"transparent"}}>★</button>
+              ))}
+            </div>
+          </div>
+
+          <Field label="Notes" value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="How did it feel?"/>
+          <div style={{display:"flex",gap:10,marginTop:8}}>
+            <Btn v="secondary" full onClick={()=>setShow(false)}>Cancel</Btn>
+            <Btn full onClick={save} disabled={form.exercises.length===0}>{Icons.check({size:16,color:V.bg})} Save</Btn>
+          </div>
+        </Sheet>
+      )}
+
+      {/* History */}
+      {s.workouts.length===0?(
+        <div style={{textAlign:"center",padding:40,color:V.text3,fontSize:13}}>No workouts yet</div>
+      ):s.workouts.slice(0,15).map(w=>{
+        const vol=w.exercises.reduce((s,e)=>s+e.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0);
+        return(
+          <Card key={w.id} style={{padding:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:12,color:V.text2}}>{fmtFull(w.date)}</span>
+                {w.rating&&<span style={{fontSize:8,color:V.warn}}>{Array.from({length:w.rating}).map(()=>"★").join("")}</span>}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:10,color:V.text3}}>{w.dur}min</span>
+                <button onClick={()=>d({type:"DEL_W",id:w.id})} style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:12,color:V.text3})}</button>
+              </div>
+            </div>
+            {w.exercises.map((ex,i)=>{
+              const exInfo=s.exercises.find(e=>e.id===ex.exerciseId);
+              const top=ex.sets.reduce((m,st)=>st.weight>m.weight?st:m,{weight:0,reps:0});
+              return(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",
+                  borderBottom:i<w.exercises.length-1?`1px solid rgba(255,255,255,0.03)`:"none"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:12,color:V.text}}>{exInfo?.name||ex.exerciseId}</span>
+                    <YTBtn yt={exInfo?.yt} size={18}/>
+                  </div>
+                  <span style={{fontSize:11,color:V.accent,fontFamily:V.mono}}>{top.weight}×{top.reps} · {ex.sets.length}s</span>
+                </div>
+              );
+            })}
+            <div style={{marginTop:4,fontSize:11,color:V.accent2,fontFamily:V.mono,textAlign:"right"}}>{vol.toLocaleString()} lbs</div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════
+//  NUTRITION TAB
+// ═══════════════════════════════════════
+function NutritionTab({s,d}){
+  const [show,setShow]=useState(false);
+  const [form,setForm]=useState({date:today(),cal:"",protein:"",carbs:"",fat:"",fiber:"",water:"",sleep:"",
+    meals:[{name:"Breakfast",items:[]},{name:"Lunch",items:[]},{name:"Dinner",items:[]},{name:"Snacks",items:[]}]});
+  const [activeMeal,setActiveMeal]=useState(null);
+
+  const start=()=>{
+    const ex=s.nutrition.find(n=>n.date===today());
+    if(ex)setForm({...ex,cal:ex.cal.toString(),protein:ex.protein.toString(),carbs:ex.carbs.toString(),fat:ex.fat.toString(),
+      fiber:(ex.fiber||"").toString(),water:(ex.water||"").toString(),sleep:(ex.sleep||"").toString(),
+      meals:ex.meals||[{name:"Breakfast",items:[]},{name:"Lunch",items:[]},{name:"Dinner",items:[]},{name:"Snacks",items:[]}]});
+    else setForm({date:today(),cal:"",protein:"",carbs:"",fat:"",fiber:"",water:"",sleep:"",
+      meals:[{name:"Breakfast",items:[]},{name:"Lunch",items:[]},{name:"Dinner",items:[]},{name:"Snacks",items:[]}]});
+    setShow(true);
+  };
+
+  const addFoodToMeal=(mi,food)=>{setForm(f=>{const m=[...f.meals];m[mi]={...m[mi],items:[...(m[mi].items||[]),food]};return{...f,meals:m};});};
+  const rmFoodFromMeal=(mi,fi)=>{setForm(f=>{const m=[...f.meals];m[mi]={...m[mi],items:m[mi].items.filter((_,i)=>i!==fi)};return{...f,meals:m};});};
+
+  const autoCalc=()=>{
+    let cal=0,protein=0,carbs=0,fat=0;
+    form.meals.forEach(m=>(m.items||[]).forEach(i=>{cal+=i.cal;protein+=i.protein;carbs+=i.carbs||0;fat+=i.fat||0;}));
+    setForm(f=>({...f,cal:cal.toString(),protein:protein.toString(),carbs:carbs.toString(),fat:fat.toString()}));
+  };
+
+  const save=()=>{
+    d({type:"ADD_N",n:{id:uid(),date:form.date,cal:parseInt(form.cal)||0,protein:parseInt(form.protein)||0,
+      carbs:parseInt(form.carbs)||0,fat:parseInt(form.fat)||0,fiber:parseInt(form.fiber)||0,
+      water:parseInt(form.water)||0,sleep:parseFloat(form.sleep)||0,meals:form.meals}});
+    setShow(false);
+  };
+
+  const week=s.nutrition.filter(n=>n.date>=ago(7));
+  const avgCal=week.length?Math.round(week.reduce((s,n)=>s+n.cal,0)/week.length):0;
+  const avgP=week.length?Math.round(week.reduce((s,n)=>s+n.protein,0)/week.length):0;
+  const totalItems=form.meals.reduce((s,m)=>(m.items||[]).length+s,0);
+
+  const macroChart=useMemo(()=>
+    s.nutrition.filter(n=>n.date>=ago(s.range)).sort((a,b)=>a.date.localeCompare(b.date))
+      .map(n=>({date:fmtShort(n.date),P:n.protein,C:n.carbs,F:n.fat}))
+  ,[s.nutrition,s.range]);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <Btn full onClick={start}>{Icons.plus({size:16,color:V.bg})} Log Nutrition</Btn>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Stat icon={Icons.flame} label="Avg Calories" value={avgCal} unit="kcal" color={V.warn}/>
+        <Stat icon={Icons.target} label="Avg Protein" value={avgP} unit="g" color={V.accent}/>
+      </div>
+
+      <Card>
+        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:12}}>Macros</span>
+        <ResponsiveContainer width="100%" height={150}>
+          <BarChart data={macroChart} barSize={8}>
+            <CartesianGrid {...chartCfg.grid} vertical={false}/>
+            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+            <YAxis {...chartCfg.axis} width={28}/>
+            <Tooltip {...chartCfg.tip}/>
+            <Bar dataKey="P" stackId="a" fill={V.accent}/>
+            <Bar dataKey="C" stackId="a" fill={V.accent2}/>
+            <Bar dataKey="F" stackId="a" fill={V.warn} radius={[3,3,0,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {show&&(
+        <Sheet title="Log Nutrition" onClose={()=>setShow(false)}>
+          <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
+
+          {/* Meals with food database search */}
+          {form.meals.map((meal,mi)=>{
+            const mCal=(meal.items||[]).reduce((s,i)=>s+i.cal,0);
+            const mP=(meal.items||[]).reduce((s,i)=>s+i.protein,0);
+            return(
+              <div key={mi} style={{marginBottom:12,padding:12,background:"rgba(255,255,255,0.02)",borderRadius:14,border:`1px solid ${V.cardBorder}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:13,fontWeight:700,color:V.text}}>{meal.name}</span>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    {mCal>0&&<span style={{fontSize:10,color:V.warn,fontFamily:V.mono}}>{mCal}cal · {mP}P</span>}
+                    <button onClick={()=>setActiveMeal(activeMeal===mi?null:mi)}
+                      style={{background:`${V.accent}15`,border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",
+                        fontSize:11,color:V.accent,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                      {activeMeal===mi?"Close":"+ Food"}
+                    </button>
+                  </div>
+                </div>
+                {(meal.items||[]).map((item,fi)=>(
+                  <div key={fi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                    <span style={{fontSize:12,color:V.text2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                      <span style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>{item.cal} · {item.protein}P</span>
+                      <button onClick={()=>rmFoodFromMeal(mi,fi)} style={{background:"none",border:"none",padding:2,cursor:"pointer"}}>{Icons.x({size:12,color:V.text3})}</button>
+                    </div>
+                  </div>
+                ))}
+                {activeMeal===mi&&<div style={{marginTop:8}}><FoodSearch onAdd={(food)=>addFoodToMeal(mi,food)}/></div>}
+              </div>
+            );
+          })}
+
+          {totalItems>0&&<Btn v="small" full onClick={autoCalc} s={{marginBottom:12}}>Auto-calculate totals from food items</Btn>}
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Calories" type="number" value={form.cal} onChange={v=>setForm(f=>({...f,cal:v}))} unit="kcal"/>
+            <Field label="Protein" type="number" value={form.protein} onChange={v=>setForm(f=>({...f,protein:v}))} unit="g"/>
+            <Field label="Carbs" type="number" value={form.carbs} onChange={v=>setForm(f=>({...f,carbs:v}))} unit="g"/>
+            <Field label="Fat" type="number" value={form.fat} onChange={v=>setForm(f=>({...f,fat:v}))} unit="g"/>
+            <Field label="Water" type="number" value={form.water} onChange={v=>setForm(f=>({...f,water:v}))} unit="cups"/>
+            <Field label="Sleep" type="number" value={form.sleep} onChange={v=>setForm(f=>({...f,sleep:v}))} unit="hrs" step="0.5"/>
+          </div>
+
+          <div style={{display:"flex",gap:10,marginTop:12}}>
+            <Btn v="secondary" full onClick={()=>setShow(false)}>Cancel</Btn>
+            <Btn full onClick={save}>{Icons.check({size:16,color:V.bg})} Save</Btn>
+          </div>
+        </Sheet>
+      )}
+
+      {/* History */}
+      {s.nutrition.slice(0,14).map(n=>(
+        <Card key={n.id} style={{padding:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:12,color:V.text2}}>{fmtFull(n.date)}</span>
+              {n.sleep>0&&<span style={{fontSize:10,color:V.purple}}>{Icons.moon({size:10,color:V.purple})} {n.sleep.toFixed(1)}h</span>}
+            </div>
+            <button onClick={()=>d({type:"DEL_N",id:n.id})} style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:13,color:V.text3})}</button>
+          </div>
+          <div style={{display:"flex",gap:12,marginTop:8,alignItems:"baseline"}}>
+            <span style={{fontSize:18,fontWeight:700,color:V.warn,fontFamily:V.mono}}>{n.cal}<span style={{fontSize:10,color:V.text3}}> kcal</span></span>
+            <span style={{fontSize:12,color:V.accent,fontFamily:V.mono}}>{n.protein}P</span>
+            <span style={{fontSize:12,color:V.accent2,fontFamily:V.mono}}>{n.carbs}C</span>
+            <span style={{fontSize:12,color:V.warn,fontFamily:V.mono}}>{n.fat}F</span>
+          </div>
+          <Progress val={n.cal} max={s.goals.cal} color={V.warn} h={4}/>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+//  BODY TAB
+// ═══════════════════════════════════════
+function BodyTab({s,d}){
+  const [show,setShow]=useState(false);
+  const [form,setForm]=useState({date:today(),weight:"",bf:"",chest:"",waist:"",arms:"",thighs:""});
+
+  const save=()=>{
+    d({type:"ADD_B",b:{id:uid(),date:form.date,weight:parseFloat(form.weight)||0,bf:parseFloat(form.bf)||0,
+      chest:parseFloat(form.chest)||0,waist:parseFloat(form.waist)||0,arms:parseFloat(form.arms)||0,thighs:parseFloat(form.thighs)||0}});
+    setShow(false);
+  };
+
+  const latest=s.body[0]; const prev=s.body[1];
+  const wc=latest&&prev?latest.weight-prev.weight:0;
+
+  const trend=useMemo(()=>
+    s.body.filter(m=>m.date>=ago(s.range)).sort((a,b)=>a.date.localeCompare(b.date))
+      .map(m=>({date:fmtShort(m.date),wt:+m.weight.toFixed(1),bf:+m.bf.toFixed(1)}))
+  ,[s.body,s.range]);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <Btn full onClick={()=>{setForm({date:today(),weight:"",bf:"",chest:"",waist:"",arms:"",thighs:""});setShow(true);}}>
+        {Icons.plus({size:16,color:V.bg})} Log Measurement
+      </Btn>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Stat icon={Icons.scale} label="Weight" value={latest?.weight.toFixed(1)||"—"} unit="lbs" color={V.purple}
+          sub={wc!==0?`${wc>0?"+":""}${wc.toFixed(1)} lbs`:undefined}/>
+        <Stat icon={Icons.activity} label="Body Fat" value={latest?.bf.toFixed(1)||"—"} unit="%" color={V.danger}/>
+      </div>
+
+      <Card>
+        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:12}}>Weight & BF%</span>
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={trend}>
+            <CartesianGrid {...chartCfg.grid} vertical={false}/>
+            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+            <YAxis yAxisId="w" domain={["dataMin-2","dataMax+2"]} {...chartCfg.axis} width={30}/>
+            <YAxis yAxisId="b" orientation="right" domain={["dataMin-1","dataMax+1"]} {...chartCfg.axis} width={28}/>
+            <Tooltip {...chartCfg.tip}/>
+            <Line yAxisId="w" type="monotone" dataKey="wt" stroke={V.purple} strokeWidth={2} dot={{r:3}} name="Weight"/>
+            <Line yAxisId="b" type="monotone" dataKey="bf" stroke={V.danger} strokeWidth={2} dot={{r:3}} name="BF%"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {latest&&(
+        <Card>
+          <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:12}}>Measurements</span>
+          {[{l:"Chest",v:latest.chest},{l:"Waist",v:latest.waist},{l:"Arms",v:latest.arms},{l:"Thighs",v:latest.thighs}].map(m=>(
+            <div key={m.l} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{width:54,fontSize:12,color:V.text2}}>{m.l}</span>
+              <div style={{flex:1,height:22,background:"rgba(255,255,255,0.03)",borderRadius:6,overflow:"hidden"}}>
+                <div style={{width:`${(m.v/50)*100}%`,height:"100%",background:`linear-gradient(90deg,${V.accent}30,${V.accent2}30)`,borderRadius:6}}/>
+              </div>
+              <span style={{fontSize:14,color:V.text,fontFamily:V.mono,minWidth:44,textAlign:"right"}}>{m.v.toFixed(1)}"</span>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {show&&(
+        <Sheet title="Log Measurement" onClose={()=>setShow(false)}>
+          <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Weight" type="number" value={form.weight} onChange={v=>setForm(f=>({...f,weight:v}))} unit="lbs" step="0.1"/>
+            <Field label="Body Fat" type="number" value={form.bf} onChange={v=>setForm(f=>({...f,bf:v}))} unit="%" step="0.1"/>
+            <Field label="Chest" type="number" value={form.chest} onChange={v=>setForm(f=>({...f,chest:v}))} unit="in" step="0.1"/>
+            <Field label="Waist" type="number" value={form.waist} onChange={v=>setForm(f=>({...f,waist:v}))} unit="in" step="0.1"/>
+            <Field label="Arms" type="number" value={form.arms} onChange={v=>setForm(f=>({...f,arms:v}))} unit="in" step="0.1"/>
+            <Field label="Thighs" type="number" value={form.thighs} onChange={v=>setForm(f=>({...f,thighs:v}))} unit="in" step="0.1"/>
+          </div>
+          <div style={{display:"flex",gap:10,marginTop:12}}>
+            <Btn v="secondary" full onClick={()=>setShow(false)}>Cancel</Btn>
+            <Btn full onClick={save}>{Icons.check({size:16,color:V.bg})} Save</Btn>
+          </div>
+        </Sheet>
+      )}
+
+      {/* History Table */}
+      <Card>
+        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:10}}>History</span>
+        {s.body.slice(0,10).map(m=>(
+          <div key={m.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",
+            borderBottom:`1px solid rgba(255,255,255,0.03)`}}>
+            <span style={{fontSize:12,color:V.text3}}>{fmtShort(m.date)}</span>
+            <div style={{display:"flex",gap:10,alignItems:"center"}}>
+              <span style={{fontSize:13,color:V.purple,fontFamily:V.mono}}>{m.weight.toFixed(1)}</span>
+              <span style={{fontSize:12,color:V.danger,fontFamily:V.mono}}>{m.bf.toFixed(1)}%</span>
+              <button onClick={()=>d({type:"DEL_B",id:m.id})} style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:12,color:V.text3})}</button>
+            </div>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+//  ANALYTICS TAB
+// ═══════════════════════════════════════
+function AnalyticsTab({s}){
+  const [selEx,setSelEx]=useState("bench");
+
+  const exProg=useMemo(()=>{
+    return s.workouts.filter(w=>w.date>=ago(s.range)).sort((a,b)=>a.date.localeCompare(b.date)).reduce((arr,w)=>{
+      const ex=w.exercises.find(e=>e.exerciseId===selEx);
+      if(ex){
+        const mw=Math.max(...ex.sets.map(st=>st.weight));
+        const vol=ex.sets.reduce((s,st)=>s+st.weight*st.reps,0);
+        const e1rm=Math.max(...ex.sets.map(st=>st.weight*(1+st.reps/30)));
+        arr.push({date:fmtShort(w.date),max:mw,vol,e1rm:Math.round(e1rm)});
+      }
+      return arr;
+    },[]);
+  },[s.workouts,selEx,s.range]);
+
+  const volByGroup=useMemo(()=>{
+    const g={};
+    s.workouts.filter(w=>w.date>=ago(s.range)).forEach(w=>w.exercises.forEach(ex=>{
+      const info=s.exercises.find(e=>e.id===ex.exerciseId);
+      if(info){const v=ex.sets.reduce((s,st)=>s+st.weight*st.reps,0);g[info.cat]=(g[info.cat]||0)+v;}
+    }));
+    return Object.entries(g).map(([name,value])=>({name,value}));
+  },[s.workouts,s.exercises,s.range]);
+
+  const freq=useMemo(()=>{
+    const c={};
+    s.workouts.filter(w=>w.date>=ago(s.range)).forEach(w=>{const dy=new Date(w.date+"T12:00:00").getDay();c[dy]=(c[dy]||0)+1;});
+    return["S","M","T","W","T","F","S"].map((d,i)=>({d,n:c[i]||0}));
+  },[s.workouts,s.range]);
+
+  const maxF=Math.max(...freq.map(f=>f.n),1);
+  const colors=[V.accent,V.accent2,V.purple,V.warn,V.danger,"#ffd93d"];
+  const exOpts=[...new Set(s.workouts.flatMap(w=>w.exercises.map(e=>e.exerciseId)))];
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* Exercise Selector */}
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:13,color:V.text2,fontWeight:600}}>Exercise Progression</span>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+          {exOpts.map(id=>(
+            <Chip key={id} label={s.exercises.find(e=>e.id===id)?.name||id} active={selEx===id} onClick={()=>setSelEx(id)}/>
+          ))}
+        </div>
+        <span style={{fontSize:11,color:V.text3,display:"block",marginBottom:6}}>Max Weight & Est. 1RM</span>
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={exProg}>
+            <CartesianGrid {...chartCfg.grid} vertical={false}/>
+            <XAxis dataKey="date" {...chartCfg.axis} interval="preserveStartEnd"/>
+            <YAxis {...chartCfg.axis} width={30}/>
+            <Tooltip {...chartCfg.tip}/>
+            <Line type="monotone" dataKey="max" stroke={V.accent} strokeWidth={2} dot={{r:3}} name="Max"/>
+            <Line type="monotone" dataKey="e1rm" stroke={V.purple} strokeWidth={2} strokeDasharray="5 5" dot={{r:2}} name="E1RM"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* Volume Pie */}
+      <Card>
+        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:12}}>Volume by Muscle</span>
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart>
+            <Pie data={volByGroup} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" paddingAngle={3}>
+              {volByGroup.map((_,i)=><Cell key={i} fill={colors[i%colors.length]}/>)}
+            </Pie>
+            <Tooltip {...chartCfg.tip}/>
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center"}}>
+          {volByGroup.map((g,i)=>(
+            <span key={g.name} style={{fontSize:10,color:colors[i%colors.length],display:"flex",alignItems:"center",gap:4,fontWeight:600}}>
+              <span style={{width:7,height:7,borderRadius:2,background:colors[i%colors.length]}}/>{g.name}
+            </span>
+          ))}
+        </div>
+      </Card>
+
+      {/* Frequency */}
+      <Card>
+        <span style={{fontSize:13,color:V.text2,fontWeight:600,display:"block",marginBottom:14}}>Weekly Frequency</span>
+        <div style={{display:"flex",gap:8,justifyContent:"center",padding:"8px 0"}}>
+          {freq.map((f,i)=>(
+            <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flex:1}}>
+              <div style={{width:"100%",maxWidth:32,height:80,borderRadius:8,background:"rgba(255,255,255,0.03)",
+                position:"relative",overflow:"hidden",display:"flex",alignItems:"flex-end"}}>
+                <div style={{width:"100%",height:`${(f.n/maxF)*100}%`,background:`linear-gradient(to top,${V.accent}40,${V.accent2}40)`,
+                  borderRadius:6,transition:"height .4s ease",minHeight:f.n>0?6:0}}/>
+              </div>
+              <span style={{fontSize:10,color:V.text3,fontWeight:600}}>{f.d}</span>
+              <span style={{fontSize:11,color:V.accent,fontFamily:V.mono}}>{f.n}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+//  CALENDAR TAB
+// ═══════════════════════════════════════
+const WORKOUT_TYPES = ["Rest","Chest","Back","Legs","Shoulders","Arms","Core","Cardio","Push","Pull","Upper","Lower","Full Body","Custom"];
+const typeColors = {
+  "Rest":"#333","Chest":V.accent,"Back":V.accent2,"Legs":V.purple,"Shoulders":V.warn,
+  "Arms":"#ff6b9d","Core":"#ffd93d","Cardio":"#ff6b6b","Push":V.accent,"Pull":V.accent2,
+  "Upper":"#e879f9","Lower":"#fb923c","Full Body":"#34d399","Custom":"#94a3b8",
+};
+const WORKOUT_TYPES_COLORS = typeColors;
+
+function CalendarTab({s,d}){
+  const [viewDate,setViewDate]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
+  const [selDate,setSelDate]=useState(null);
+  const [editWeekly,setEditWeekly]=useState(false);
+  const [weeklyDraft,setWeeklyDraft]=useState(s.schedule.weekly);
+  const [assignSheet,setAssignSheet]=useState(null); // date string for override assign
+
+  const todayStr=today();
+  const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const monthNames=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  // Build calendar grid
+  const calDays=useMemo(()=>{
+    const first=new Date(viewDate.y,viewDate.m,1);
+    const startDay=first.getDay();
+    const daysInMonth=new Date(viewDate.y,viewDate.m+1,0).getDate();
+    const prevMonthDays=new Date(viewDate.y,viewDate.m,0).getDate();
+    const cells=[];
+    // Previous month filler
+    for(let i=startDay-1;i>=0;i--){
+      const d=prevMonthDays-i;
+      const dt=new Date(viewDate.y,viewDate.m-1,d);
+      cells.push({day:d,date:dt.toISOString().split("T")[0],inMonth:false});
+    }
+    // Current month
+    for(let i=1;i<=daysInMonth;i++){
+      const dt=new Date(viewDate.y,viewDate.m,i);
+      cells.push({day:i,date:dt.toISOString().split("T")[0],inMonth:true});
+    }
+    // Next month filler
+    const remaining=7-(cells.length%7);
+    if(remaining<7){
+      for(let i=1;i<=remaining;i++){
+        const dt=new Date(viewDate.y,viewDate.m+1,i);
+        cells.push({day:i,date:dt.toISOString().split("T")[0],inMonth:false});
+      }
+    }
+    return cells;
+  },[viewDate]);
+
+  // Get workout type for a date
+  const getType=(dateStr)=>{
+    if(s.schedule.overrides[dateStr])return s.schedule.overrides[dateStr];
+    const dow=new Date(dateStr+"T12:00:00").getDay();
+    return s.schedule.weekly[dow]||"Rest";
+  };
+
+  // Get the workout done on a date
+  const getWorkout=(dateStr)=>s.workouts.find(w=>w.date===dateStr);
+
+  // Get the LAST workout matching a type (looking backwards from date)
+  const getLastOfType=(type,beforeDate)=>{
+    // Map type to exercise categories
+    const catMap={"Chest":"Chest","Back":"Back","Legs":"Legs","Shoulders":"Shoulders","Arms":"Arms","Core":"Core","Cardio":"Cardio",
+      "Push":"Chest","Pull":"Back","Upper":"Chest","Lower":"Legs","Full Body":"Chest"};
+    // Find workouts that had exercises in this category
+    const matchingCat=catMap[type];
+    if(!matchingCat)return null;
+    // For compound types, just find any recent workout
+    if(["Push","Pull","Upper","Lower","Full Body"].includes(type)){
+      return s.workouts.filter(w=>w.date<beforeDate).sort((a,b)=>b.date.localeCompare(a.date))[0]||null;
+    }
+    // For specific categories, find workouts that included that muscle group
+    for(const w of s.workouts.filter(wk=>wk.date<beforeDate).sort((a,b)=>b.date.localeCompare(a.date))){
+      const hasCategory=w.exercises.some(ex=>{
+        const info=s.exercises.find(e=>e.id===ex.exerciseId);
+        return info?.cat===matchingCat;
+      });
+      if(hasCategory)return w;
+    }
+    return null;
+  };
+
+  // Get recommended exercises for a workout type
+  const getExercisesForType=(type)=>{
+    const catMap={"Chest":"Chest","Back":"Back","Legs":"Legs","Shoulders":"Shoulders","Arms":"Arms","Core":"Core","Cardio":"Cardio"};
+    const multiMap={"Push":["Chest","Shoulders","Arms"],"Pull":["Back","Arms"],"Upper":["Chest","Back","Shoulders","Arms"],
+      "Lower":["Legs","Core"],"Full Body":["Chest","Back","Legs","Shoulders","Arms"]};
+    const cats=multiMap[type]?multiMap[type]:(catMap[type]?[catMap[type]]:[]);
+    return s.exercises.filter(e=>cats.includes(e.cat));
+  };
+
+  const prevMonth=()=>setViewDate(v=>v.m===0?{y:v.y-1,m:11}:{...v,m:v.m-1});
+  const nextMonth=()=>setViewDate(v=>v.m===11?{y:v.y+1,m:0}:{...v,m:v.m+1});
+  const goToday=()=>{const n=new Date();setViewDate({y:n.getFullYear(),m:n.getMonth()});};
+
+  const saveWeekly=()=>{
+    Object.entries(weeklyDraft).forEach(([day,label])=>{
+      d({type:"SET_WEEKLY",day:parseInt(day),label});
+    });
+    setEditWeekly(false);
+  };
+
+  // Selected day detail
+  const selType=selDate?getType(selDate):null;
+  const selWorkout=selDate?getWorkout(selDate):null;
+  const selLastOfType=selDate&&selType&&selType!=="Rest"?getLastOfType(selType,selDate):null;
+  const selExercises=selType?getExercisesForType(selType):[];
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* Month Navigation */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <button onClick={prevMonth} style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          {Icons.chevLeft({size:20,color:V.text2})}
+        </button>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:18,fontWeight:700,color:V.text}}>{monthNames[viewDate.m]}</div>
+          <div style={{fontSize:12,color:V.text3}}>{viewDate.y}</div>
+        </div>
+        <button onClick={nextMonth} style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+          {Icons.chevRight({size:20,color:V.text2})}
+        </button>
+      </div>
+
+      {/* Today button */}
+      <div style={{display:"flex",justifyContent:"center"}}>
+        <Btn v="small" onClick={goToday} s={{fontSize:11}}>Today</Btn>
+      </div>
+
+      {/* Weekly Plan Strip */}
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <span style={{fontSize:12,color:V.text2,fontWeight:700}}>Weekly Plan</span>
+          <Btn v="ghost" onClick={()=>{setWeeklyDraft({...s.schedule.weekly});setEditWeekly(true);}} s={{fontSize:11,padding:"4px 8px"}}>Edit</Btn>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+          {dayNames.map((dn,i)=>{
+            const type=s.schedule.weekly[i]||"Rest";
+            const color=typeColors[type]||V.text3;
+            return(
+              <div key={i} style={{textAlign:"center"}}>
+                <div style={{fontSize:9,color:V.text3,marginBottom:3,fontWeight:600}}>{dn}</div>
+                <div style={{fontSize:9,color:color,fontWeight:700,padding:"4px 2px",
+                  background:`${color}12`,borderRadius:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {type==="Rest"?"—":type.slice(0,4)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Calendar Grid */}
+      <Card style={{padding:12}}>
+        {/* Day headers */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6}}>
+          {dayNames.map(dn=>(
+            <div key={dn} style={{textAlign:"center",fontSize:10,color:V.text3,fontWeight:700,padding:"4px 0"}}>{dn}</div>
+          ))}
+        </div>
+        {/* Date cells */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+          {calDays.map((cell,i)=>{
+            const type=getType(cell.date);
+            const isToday=cell.date===todayStr;
+            const isSel=cell.date===selDate;
+            const hasWorkout=!!getWorkout(cell.date);
+            const color=typeColors[type]||"#333";
+            const isOverride=!!s.schedule.overrides[cell.date];
+            return(
+              <button key={i} onClick={()=>setSelDate(cell.date===selDate?null:cell.date)}
+                style={{
+                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                  aspectRatio:"1",borderRadius:10,border:isSel?`2px solid ${V.accent}`:isToday?`1.5px solid ${V.accent}50`:"2px solid transparent",
+                  background:isSel?`${V.accent}12`:type!=="Rest"?`${color}08`:"transparent",
+                  cursor:"pointer",padding:2,WebkitTapHighlightColor:"transparent",position:"relative",
+                  opacity:cell.inMonth?1:0.25,
+                }}>
+                <span style={{fontSize:13,fontWeight:isToday?800:500,color:cell.inMonth?V.text:V.text3,
+                  fontFamily:V.mono,lineHeight:1}}>{cell.day}</span>
+                {type!=="Rest"&&cell.inMonth&&(
+                  <span style={{fontSize:6,color:color,fontWeight:800,marginTop:1,textTransform:"uppercase",lineHeight:1}}>
+                    {type.slice(0,3)}
+                  </span>
+                )}
+                {hasWorkout&&cell.inMonth&&(
+                  <div style={{position:"absolute",bottom:3,width:4,height:4,borderRadius:2,background:V.accent}}/>
+                )}
+                {isOverride&&cell.inMonth&&(
+                  <div style={{position:"absolute",top:2,right:3,width:4,height:4,borderRadius:2,background:V.warn}}/>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {/* Legend */}
+        <div style={{display:"flex",gap:10,justifyContent:"center",marginTop:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:9,color:V.text3,display:"flex",alignItems:"center",gap:3}}>
+            <span style={{width:5,height:5,borderRadius:3,background:V.accent}}/> Completed
+          </span>
+          <span style={{fontSize:9,color:V.text3,display:"flex",alignItems:"center",gap:3}}>
+            <span style={{width:5,height:5,borderRadius:3,background:V.warn}}/> Override
+          </span>
+        </div>
+      </Card>
+
+      {/* Selected Day Detail */}
+      {selDate&&(
+        <Card glow>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:V.text}}>{fmtFull(selDate)}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+                <span style={{fontSize:12,fontWeight:700,color:typeColors[selType]||V.text3,
+                  background:`${typeColors[selType]||V.text3}15`,padding:"3px 10px",borderRadius:8}}>
+                  {selType}
+                </span>
+                {selDate===todayStr&&<span style={{fontSize:10,color:V.accent,fontWeight:700}}>TODAY</span>}
+              </div>
+            </div>
+            <Btn v="small" onClick={()=>setAssignSheet(selDate)} s={{fontSize:11}}>Change</Btn>
+          </div>
+
+          {/* What was done */}
+          {selWorkout?(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:V.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8,
+                display:"flex",alignItems:"center",gap:5}}>
+                {Icons.check({size:13,color:V.accent})} Completed · {selWorkout.dur}min
+              </div>
+              {selWorkout.exercises.map((ex,i)=>{
+                const exInfo=s.exercises.find(e=>e.id===ex.exerciseId);
+                const top=ex.sets.reduce((m,st)=>st.weight>m.weight?st:m,{weight:0,reps:0});
+                return(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",
+                    borderBottom:i<selWorkout.exercises.length-1?`1px solid rgba(255,255,255,0.04)`:"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:13,color:V.text}}>{exInfo?.name||ex.exerciseId}</span>
+                      {exInfo?.yt&&(
+                        <a href={`https://www.youtube.com/watch?v=${exInfo.yt}`} target="_blank" rel="noopener noreferrer"
+                          style={{width:20,height:20,borderRadius:5,background:"rgba(255,0,0,0.10)",
+                            display:"inline-flex",alignItems:"center",justifyContent:"center",textDecoration:"none",
+                            WebkitTapHighlightColor:"transparent"}}>
+                          {Icons.play({size:8,color:"#ff4444"})}
+                        </a>
+                      )}
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <span style={{fontSize:12,color:V.accent,fontFamily:V.mono}}>{top.weight}×{top.reps}</span>
+                      <span style={{fontSize:10,color:V.text3,marginLeft:6}}>{ex.sets.length}s</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ):(
+            selType!=="Rest"&&(
+              <div style={{padding:"12px 0",marginBottom:10,borderBottom:`1px solid ${V.cardBorder}`}}>
+                <div style={{fontSize:11,color:V.text3,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
+                  {Icons.clock({size:13,color:V.text3})} Not yet completed
+                </div>
+              </div>
+            )
+          )}
+
+          {/* Last time this type was done */}
+          {selType!=="Rest"&&selLastOfType&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:V.warn,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>
+                Last {selType} Day — {fmtFull(selLastOfType.date)}
+              </div>
+              {selLastOfType.exercises.map((ex,i)=>{
+                const exInfo=s.exercises.find(e=>e.id===ex.exerciseId);
+                const top=ex.sets.reduce((m,st)=>st.weight>m.weight?st:m,{weight:0,reps:0});
+                return(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",
+                    borderBottom:i<selLastOfType.exercises.length-1?`1px solid rgba(255,255,255,0.03)`:"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:12,color:V.text2}}>{exInfo?.name||ex.exerciseId}</span>
+                      {exInfo?.yt&&(
+                        <a href={`https://www.youtube.com/watch?v=${exInfo.yt}`} target="_blank" rel="noopener noreferrer"
+                          style={{width:18,height:18,borderRadius:5,background:"rgba(255,0,0,0.08)",
+                            display:"inline-flex",alignItems:"center",justifyContent:"center",textDecoration:"none"}}>
+                          {Icons.play({size:7,color:"#ff4444"})}
+                        </a>
+                      )}
+                    </div>
+                    <span style={{fontSize:11,color:V.text3,fontFamily:V.mono}}>{top.weight}×{top.reps} · {ex.sets.length}s</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Suggested exercises for this day */}
+          {selType!=="Rest"&&selExercises.length>0&&(
+            <div>
+              <div style={{fontSize:11,color:V.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>
+                {selType} Exercises
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {selExercises.slice(0,12).map(ex=>(
+                  <a key={ex.id} href={ex.yt?`https://www.youtube.com/watch?v=${ex.yt}`:undefined}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",
+                      background:`${typeColors[selType]||V.text3}08`,border:`1px solid ${typeColors[selType]||V.text3}15`,
+                      borderRadius:8,textDecoration:"none",WebkitTapHighlightColor:"transparent"}}>
+                    <span style={{fontSize:11,color:V.text2}}>{ex.name}</span>
+                    {ex.yt&&Icons.play({size:8,color:"#ff4444"})}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Edit Weekly Schedule Sheet */}
+      {editWeekly&&(
+        <Sheet title="Edit Weekly Plan" onClose={()=>setEditWeekly(false)}>
+          <div style={{fontSize:12,color:V.text3,marginBottom:16}}>
+            Assign a workout type to each day of the week. This sets your recurring plan.
+          </div>
+          {dayNames.map((dn,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{width:40,fontSize:13,color:V.text,fontWeight:700}}>{dn}</span>
+              <div style={{flex:1,display:"flex",gap:4,flexWrap:"wrap"}}>
+                {WORKOUT_TYPES.map(t=>(
+                  <button key={t} onClick={()=>setWeeklyDraft(d=>({...d,[i]:t}))}
+                    style={{padding:"6px 10px",borderRadius:8,border:"none",fontSize:11,fontWeight:600,
+                      fontFamily:V.font,cursor:"pointer",WebkitTapHighlightColor:"transparent",
+                      background:weeklyDraft[i]===t?`${typeColors[t]||V.text3}25`:"rgba(255,255,255,0.04)",
+                      color:weeklyDraft[i]===t?(typeColors[t]||V.text3):V.text3}}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div style={{display:"flex",gap:10,marginTop:16}}>
+            <Btn v="secondary" full onClick={()=>setEditWeekly(false)}>Cancel</Btn>
+            <Btn full onClick={saveWeekly}>{Icons.check({size:16,color:V.bg})} Save</Btn>
+          </div>
+        </Sheet>
+      )}
+
+      {/* Assign Override Sheet */}
+      {assignSheet&&(
+        <Sheet title={`Assign — ${fmtFull(assignSheet)}`} onClose={()=>setAssignSheet(null)}>
+          <div style={{fontSize:12,color:V.text3,marginBottom:12}}>
+            Override the workout type for this specific date. Tap "Use Weekly Default" to remove the override.
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {WORKOUT_TYPES.map(t=>{
+              const current=s.schedule.overrides[assignSheet];
+              const isActive=current===t;
+              return(
+                <button key={t} onClick={()=>{d({type:"SET_OVERRIDE",date:assignSheet,label:t});setAssignSheet(null);setSelDate(assignSheet);}}
+                  style={{padding:"12px 16px",borderRadius:12,border:`1.5px solid ${isActive?typeColors[t]||V.text3:V.cardBorder}`,
+                    fontSize:13,fontWeight:600,fontFamily:V.font,cursor:"pointer",WebkitTapHighlightColor:"transparent",
+                    background:isActive?`${typeColors[t]||V.text3}15`:"rgba(255,255,255,0.03)",
+                    color:typeColors[t]||V.text3,minWidth:80,textAlign:"center"}}>
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+          {s.schedule.overrides[assignSheet]&&(
+            <Btn v="ghost" full onClick={()=>{d({type:"SET_OVERRIDE",date:assignSheet,label:null});setAssignSheet(null);}}
+              s={{marginTop:14,color:V.text3}}>
+              Use Weekly Default
+            </Btn>
+          )}
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+//  SETTINGS TAB (More)
+// ═══════════════════════════════════════
+function SettingsTab({s,d}){
+  const [goals,setGoals]=useState(s.goals);
+  const [saved,setSaved]=useState(false);
+  const [newEx,setNewEx]=useState("");
+  const [newCat,setNewCat]=useState("Chest");
+  const [newYt,setNewYt]=useState("");
+
+  const saveGoals=()=>{
+    d({type:"GOALS",g:{cal:parseInt(goals.cal)||2400,protein:parseInt(goals.protein)||180,carbs:parseInt(goals.carbs)||250,
+      fat:parseInt(goals.fat)||70,goalWeight:parseInt(goals.goalWeight)||175}});
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+
+  const addEx=()=>{
+    if(!newEx)return;
+    // Extract YouTube video ID from full URL or just use as-is
+    let ytId=newYt.trim();
+    if(ytId.includes("youtube.com/watch")){try{ytId=new URL(ytId).searchParams.get("v")||"";}catch(e){}}
+    else if(ytId.includes("youtu.be/")){ytId=ytId.split("youtu.be/")[1]?.split(/[?&]/)[0]||"";}
+    d({type:"ADD_EX",ex:{id:uid(),name:newEx,cat:newCat,...(ytId?{yt:ytId}:{})}});
+    setNewEx("");setNewYt("");
+  };
+
+  const loadDemo=()=>{
+    const dm=genDemo();
+    dm.workouts.forEach(w=>d({type:"ADD_W",w}));
+    dm.nutrition.forEach(n=>d({type:"ADD_N",n}));
+    dm.body.forEach(b=>d({type:"ADD_B",b}));
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* Analytics Shortcut */}
+      <Card onClick={()=>d({type:"TAB",tab:"analytics"})}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:38,height:38,borderRadius:11,background:`${V.accent2}12`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {Icons.chart({size:18,color:V.accent2})}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,color:V.text,fontWeight:700}}>Analytics</div>
+            <div style={{fontSize:11,color:V.text3}}>Exercise progression, volume, frequency</div>
+          </div>
+          {Icons.chevRight({size:16,color:V.text3})}
+        </div>
+      </Card>
+
+      <Card>
+        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:14}}>Daily Goals</span>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Field label="Calories" type="number" value={goals.cal} onChange={v=>setGoals(g=>({...g,cal:v}))} unit="kcal"/>
+          <Field label="Protein" type="number" value={goals.protein} onChange={v=>setGoals(g=>({...g,protein:v}))} unit="g"/>
+          <Field label="Carbs" type="number" value={goals.carbs} onChange={v=>setGoals(g=>({...g,carbs:v}))} unit="g"/>
+          <Field label="Fat" type="number" value={goals.fat} onChange={v=>setGoals(g=>({...g,fat:v}))} unit="g"/>
+          <Field label="Goal Weight" type="number" value={goals.goalWeight} onChange={v=>setGoals(g=>({...g,goalWeight:v}))} unit="lbs"/>
+        </div>
+        <Btn full onClick={saveGoals} s={{marginTop:4}}>{Icons.check({size:16,color:V.bg})} {saved?"Saved!":"Save Goals"}</Btn>
+      </Card>
+
+      <Card>
+        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:14}}>Custom Exercise</span>
+        <Field label="Name" value={newEx} onChange={setNewEx} placeholder="e.g. Bulgarian Split Squat"/>
+        <Field label="YouTube Link (optional)" value={newYt} onChange={setNewYt} placeholder="Paste URL or video ID"/>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+          {["Chest","Back","Legs","Shoulders","Arms","Core","Cardio"].map(c=>(
+            <Chip key={c} label={c} active={newCat===c} onClick={()=>setNewCat(c)}/>
+          ))}
+        </div>
+        <Btn v="small" full onClick={addEx}>{Icons.plus({size:14,color:V.accent})} Add Exercise</Btn>
+      </Card>
+
+      <Card>
+        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:8}}>Demo Data</span>
+        <div style={{fontSize:12,color:V.text3,marginBottom:12}}>Load 30 days of sample workouts, nutrition, and body metrics.</div>
+        <Btn v="secondary" full onClick={loadDemo}>{Icons.refresh({size:14,color:V.text2})} Load Demo Data</Btn>
+      </Card>
+
+      <Card>
+        <span style={{fontSize:14,color:V.text,fontWeight:700,display:"block",marginBottom:8}}>Date Range</span>
+        <div style={{display:"flex",gap:8}}>
+          {[7,14,30,90].map(n=>(
+            <Chip key={n} label={`${n}d`} active={s.range===n} onClick={()=>d({type:"RANGE",d:n})}/>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+//  MAIN APP
+// ═══════════════════════════════════════
+function App(){
+  const [s,d]=useReducer(reducer,init);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const keys=null;
+        const data={};
+        ["ft-w","ft-n","ft-b","ft-ex","ft-g","ft-sched"].forEach(k=>{const v=LS.get(k);if(v)data[k]=v;});
+        d({type:"INIT",p:{workouts:data["ft-w"]||[],nutrition:data["ft-n"]||[],body:data["ft-b"]||[],
+          exercises:data["ft-ex"]||defaultExercises,goals:data["ft-g"]||init.goals,schedule:data["ft-sched"]||defaultSchedule}});
+      }catch(e){
+        const dm=genDemo();
+        d({type:"INIT",p:{...dm,exercises:defaultExercises,goals:init.goals,schedule:defaultSchedule}});
+      }
+    })();
+  },[]);
+
+  useEffect(()=>{
+    if(!s.loaded)return;
+    (async()=>{try{
+      LS.set("ft-w",s.workouts);
+      LS.set("ft-n",s.nutrition);
+      LS.set("ft-b",s.body);
+      LS.set("ft-ex",s.exercises);
+      LS.set("ft-g",s.goals);
+      LS.set("ft-sched",s.schedule);
+    }catch(e){}})();
+  },[s.workouts,s.nutrition,s.body,s.exercises,s.goals,s.schedule,s.loaded]);
+
+  const tabs=[
+    {id:"home",icon:Icons.activity,label:"Home"},
+    {id:"calendar",icon:Icons.calendar,label:"Plan"},
+    {id:"workout",icon:Icons.dumbbell,label:"Workout"},
+    {id:"nutrition",icon:Icons.fork,label:"Nutrition"},
+    {id:"body",icon:Icons.scale,label:"Body"},
+    {id:"settings",icon:Icons.target,label:"More"},
+  ];
+
+  return(
+    <div style={{
+      minHeight:"100vh",maxWidth:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
+      display:"flex",flexDirection:"column",position:"relative",overflow:"hidden",
+    }}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+      {/* Status Bar Area */}
+      <div style={{height:"env(safe-area-inset-top, 0px)",background:V.bg,flexShrink:0}}/>
+
+      {/* Header */}
+      <div style={{padding:"12px 20px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:28,height:28,borderRadius:8,background:`linear-gradient(135deg,${V.accent},${V.accent2})`,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {Icons.activity({size:15,color:V.bg,strokeWidth:2.5})}
+          </div>
+          <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.03em"}}>
+            IRON<span style={{color:V.accent}}>LOG</span>
+          </span>
+        </div>
+        <div style={{display:"flex",gap:3}}>
+          {[7,14,30].map(n=>(
+            <button key={n} onClick={()=>d({type:"RANGE",d:n})} style={{
+              padding:"5px 10px",borderRadius:8,border:"none",fontSize:10,fontWeight:700,fontFamily:V.font,
+              background:s.range===n?`${V.accent}15`:"transparent",color:s.range===n?V.accent:V.text3,cursor:"pointer",
+              WebkitTapHighlightColor:"transparent",
+            }}>{n}d</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"0 16px 16px"}}>
+        {s.tab==="home"&&<HomeTab s={s} d={d}/>}
+        {s.tab==="calendar"&&<CalendarTab s={s} d={d}/>}
+        {s.tab==="workout"&&<WorkoutTab s={s} d={d}/>}
+        {s.tab==="nutrition"&&<NutritionTab s={s} d={d}/>}
+        {s.tab==="body"&&<BodyTab s={s} d={d}/>}
+        {s.tab==="analytics"&&<AnalyticsTab s={s} d={d}/>}
+        {s.tab==="settings"&&<SettingsTab s={s} d={d}/>}
+      </div>
+
+      {/* Bottom Tab Bar */}
+      <div style={{
+        flexShrink:0,background:"rgba(8,8,13,0.92)",backdropFilter:"blur(20px)",
+        borderTop:`1px solid ${V.cardBorder}`,
+        paddingBottom:"env(safe-area-inset-bottom, 8px)",
+        display:"flex",justifyContent:"space-around",alignItems:"center",paddingTop:6,
+      }}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>d({type:"TAB",tab:t.id})} style={{
+            display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+            background:"none",border:"none",cursor:"pointer",padding:"6px 8px",minWidth:48,
+            WebkitTapHighlightColor:"transparent",transition:"all .15s",
+          }}>
+            {t.icon({size:20,color:s.tab===t.id?V.accent:V.text3,strokeWidth:s.tab===t.id?2.2:1.8})}
+            <span style={{fontSize:9,fontWeight:s.tab===t.id?700:500,color:s.tab===t.id?V.accent:V.text3,
+              fontFamily:V.font,letterSpacing:".02em"}}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Mount ───
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}
+</script>
+</body>
+</html>
