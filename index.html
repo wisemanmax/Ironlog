@@ -2420,7 +2420,7 @@ function Onboarding({d}){
 
   const sendToBackend=async(payload)=>{
     try{
-      const res=await fetch("https://ironlog.space/api/users/create",{
+      const res=await fetch("https://ironlog-api.vercel.app/api/users/create",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(payload),
@@ -2768,7 +2768,7 @@ function ProfileEditor({s,d}){
     // Sync to backend
     setSyncing(true);
     try{
-      await fetch("https://ironlog.space/api/users/update",{
+      await fetch("https://ironlog-api.vercel.app/api/users/update",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({...form,updatedAt:new Date().toISOString()}),
