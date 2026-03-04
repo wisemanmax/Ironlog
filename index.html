@@ -27,6 +27,7 @@ input[type=number]{-moz-appearance:textfield}
 #loader .err{margin-top:16px;font-size:12px;color:#ff6b6b;font-family:'JetBrains Mono',monospace;max-width:90%;text-align:center;word-break:break-all}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important;}}
 </style>
 </head>
 <body>
@@ -255,7 +256,7 @@ const CloudSync={
     try{
       const res=await fetch(`${SYNC_URL}/api/sync/pull`,{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:AuthToken.getHeaders(email),
         body:JSON.stringify({email,deviceId}),
       });
       if(!res.ok)throw new Error("Pull failed");
@@ -2054,7 +2055,7 @@ function WorkoutTab({s,d}){
                     <YTBtn yt={info?.yt} size={24}/>
                     {pb&&<span style={{fontSize:10,color:V.text3}}>PR:{pb}</span>}
                   </div>
-                  <button onClick={()=>rmEx(ei)} style={{background:"none",border:"none",padding:8,cursor:"pointer"}}>{Icons.trash({size:14,color:V.text3})}</button>
+                  <button onClick={()=>rmEx(ei)} aria-label="Remove exercise" style={{background:"none",border:"none",padding:8,cursor:"pointer"}}>{Icons.trash({size:14,color:V.text3})}</button>
                 </div>
                 {(()=>{const sug=getOverloadSuggestion(ex.exerciseId,s.workouts,s.units);return sug?(
                   <div style={{marginBottom:10,padding:"8px 10px",
@@ -2312,7 +2313,7 @@ function NutritionTab({s,d}){
                     <span style={{fontSize:12,color:V.text2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</span>
                     <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                       <span style={{fontSize:10,color:V.text3,fontFamily:V.mono}}>{item.cal} · {item.protein}P</span>
-                      <button onClick={()=>rmFoodFromMeal(mi,fi)} style={{background:"none",border:"none",padding:2,cursor:"pointer"}}>{Icons.x({size:12,color:V.text3})}</button>
+                      <button onClick={()=>rmFoodFromMeal(mi,fi)} aria-label="Remove food item" style={{background:"none",border:"none",padding:2,cursor:"pointer"}}>{Icons.x({size:12,color:V.text3})}</button>
                     </div>
                   </div>
                 ))}
@@ -2349,7 +2350,7 @@ function NutritionTab({s,d}){
               <span style={{fontSize:12,color:V.text2}}>{fmtFull(n.date)}</span>
               {n.sleep>0&&<span style={{fontSize:10,color:V.purple}}>{Icons.moon({size:10,color:V.purple})} {n.sleep.toFixed(1)}h</span>}
             </div>
-            <button onClick={()=>d({type:"DEL_N",id:n.id})} style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:13,color:V.text3})}</button>
+            <button onClick={()=>d({type:"DEL_N",id:n.id})} aria-label="Delete nutrition entry" style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:13,color:V.text3})}</button>
           </div>
           <div style={{display:"flex",gap:12,marginTop:8,alignItems:"baseline"}}>
             <span style={{fontSize:18,fontWeight:700,color:V.warn,fontFamily:V.mono}}>{n.cal}<span style={{fontSize:10,color:V.text3}}> kcal</span></span>
@@ -2452,7 +2453,7 @@ function BodyTab({s,d}){
             <div style={{display:"flex",gap:10,alignItems:"center"}}>
               <span style={{fontSize:13,color:V.purple,fontFamily:V.mono}}>{m.weight.toFixed(1)}</span>
               <span style={{fontSize:12,color:V.danger,fontFamily:V.mono}}>{m.bf.toFixed(1)}%</span>
-              <button onClick={()=>d({type:"DEL_B",id:m.id})} style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:12,color:V.text3})}</button>
+              <button onClick={()=>d({type:"DEL_B",id:m.id})} aria-label="Delete measurement" style={{background:"none",border:"none",padding:4,cursor:"pointer"}}>{Icons.trash({size:12,color:V.text3})}</button>
             </div>
           </div>
         ))}
@@ -2679,14 +2680,14 @@ function CalendarTab({s,d}){
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       {/* Month Navigation */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <button onClick={prevMonth} style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+        <button onClick={prevMonth} aria-label="Previous month" style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
           {Icons.chevLeft({size:20,color:V.text2})}
         </button>
         <div style={{textAlign:"center"}}>
           <div style={{fontSize:18,fontWeight:700,color:V.text}}>{monthNames[viewDate.m]}</div>
           <div style={{fontSize:12,color:V.text3}}>{viewDate.y}</div>
         </div>
-        <button onClick={nextMonth} style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+        <button onClick={nextMonth} aria-label="Next month" style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
           {Icons.chevRight({size:20,color:V.text2})}
         </button>
       </div>
@@ -3453,6 +3454,9 @@ function Onboarding({d}){
     d({type:"SET_SCHEDULE",schedule:{weekly:splits[split].days,overrides:{}}});
     d({type:"SET_PROFILE",profile});
     if(bw){d({type:"ADD_B",b:{id:uid(),date:today(),weight:parseFloat(bw)||0,bf:"",chest:"",waist:"",arms:"",thighs:""}});}
+    // Init auth key for this device
+    AuthToken.init(profile.email);
+    LS.set("ft-device-id",payload.deviceId);
     d({type:"ONBOARDED"});
     setSending(false);
   };
@@ -5883,6 +5887,19 @@ function App(){
   // Show onboarding if first launch
   if(s.loaded&&!s.onboarded) return <Onboarding d={d}/>;
 
+  // Feature tour after first onboarding
+  const [tourStep,setTourStep]=useState(LS.get("ft-tour-done")?-1:0);
+  const tourSteps=[
+    {title:"Welcome to IRONLOG!",msg:"Here's a quick tour of your new fitness tracker.",icon:"🎉",target:"home"},
+    {title:"Log Workouts",msg:"Tap the + button to log exercises with sets, reps, and weight. Your PRs are tracked automatically.",icon:"💪",target:"log"},
+    {title:"Track Nutrition",msg:"Log meals from 500+ foods, scan barcodes, or add custom entries. Copy yesterday's meals in one tap.",icon:"🥗",target:"log"},
+    {title:"Your Dashboard",msg:"The home screen shows your readiness score, workout streak, and daily schedule. Check in daily for best results.",icon:"📊",target:"home"},
+    {title:"Track Hub",msg:"Explore 15+ tools: AI Coach, Heat Map, Goals, Phases, Injury tracking, and more.",icon:"🧭",target:"track"},
+    {title:"Cloud Sync",msg:"Your data syncs automatically. Everything works offline too — it'll sync when you reconnect.",icon:"☁️",target:"settings"},
+    {title:"You're all set!",msg:"Start by logging your first workout. The app gets smarter as you use it.",icon:"🚀",target:"home"},
+  ];
+  const closeTour=()=>{setTourStep(-1);LS.set("ft-tour-done",true);};
+
   // Back button component for sub-pages
   const SubBack=({to,label})=>(
     <button onClick={()=>d({type:"TAB",tab:to})} style={{background:"none",border:"none",display:"flex",alignItems:"center",
@@ -5980,7 +5997,7 @@ function App(){
       )}
 
       {/* Content — scrollable region */}
-      <div ref={contentRef} style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",
+      <div ref={contentRef} role="main" aria-label="App content" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",
         WebkitOverflowScrolling:"touch",padding:"0 16px 24px",
         overscrollBehavior:"contain"}}>
         {s.tab==="home"&&<HomeTab s={s} d={d}/>}
@@ -6018,7 +6035,7 @@ function App(){
       </div>
 
       {/* Bottom Nav — always visible, highlights parent group */}
-      <div style={{
+      <nav role="navigation" aria-label="Main navigation" style={{
         flexShrink:0,background:"rgba(8,8,13,0.95)",backdropFilter:"blur(24px) saturate(180%)",
         borderTop:`1px solid rgba(255,255,255,0.06)`,
         paddingBottom:"env(safe-area-inset-bottom, 8px)",
@@ -6027,7 +6044,7 @@ function App(){
         {tabs.map(t=>{
           const active=activeParent===t.id;
           return(
-            <button key={t.id} onClick={()=>d({type:"TAB",tab:t.id})} style={{
+            <button key={t.id} onClick={()=>d({type:"TAB",tab:t.id})} aria-label={t.label} aria-current={active?"page":undefined} style={{
               display:"flex",flexDirection:"column",alignItems:"center",gap:3,
               background:"none",border:"none",cursor:"pointer",
               padding:"6px 16px",minWidth:64,
@@ -6054,8 +6071,35 @@ function App(){
             </button>
           );
         })}
-      </div>
+      </nav>
       <UndoToast d={d}/>
+      {/* Feature Tour Overlay */}
+      {tourStep>=0&&tourStep<tourSteps.length&&(
+        <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.75)",backdropFilter:"blur(6px)"}} onClick={closeTour}/>
+          <div role="dialog" aria-modal="true" aria-label="Feature tour" style={{position:"relative",background:"linear-gradient(180deg,#1a1a28,#0e0e16)",
+            borderRadius:20,padding:28,maxWidth:320,width:"100%",border:`1px solid ${V.accent}30`,textAlign:"center"}}>
+            <div style={{fontSize:44,marginBottom:12}}>{tourSteps[tourStep].icon}</div>
+            <div style={{fontSize:17,fontWeight:800,color:V.text,marginBottom:6}}>{tourSteps[tourStep].title}</div>
+            <div style={{fontSize:13,color:V.text3,lineHeight:1.6,marginBottom:20}}>{tourSteps[tourStep].msg}</div>
+            <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:16}}>
+              {tourSteps.map((_,i)=>(
+                <div key={i} style={{width:i===tourStep?20:6,height:6,borderRadius:3,
+                  background:i<=tourStep?V.accent:"rgba(255,255,255,0.1)",transition:"all .3s"}}/>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={closeTour} style={{flex:1,padding:"10px",borderRadius:10,background:"rgba(255,255,255,0.04)",
+                border:`1px solid ${V.cardBorder}`,cursor:"pointer",fontSize:12,color:V.text3,fontFamily:V.font}}>Skip Tour</button>
+              <button onClick={()=>{if(tourStep>=tourSteps.length-1)closeTour();else setTourStep(t=>t+1);}}
+                style={{flex:1,padding:"10px",borderRadius:10,background:V.accent,border:"none",cursor:"pointer",
+                  fontSize:12,fontWeight:700,color:V.bg,fontFamily:V.font}}>
+                {tourStep>=tourSteps.length-1?"Let's Go!":"Next"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
