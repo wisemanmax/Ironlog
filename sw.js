@@ -1,6 +1,6 @@
 // ═══ IRONLOG Service Worker v4.1.1 ═══
 // IMPORTANT: Increment SW_VERSION on every deploy
-var SW_VERSION = 'ironlog-v4.2';
+var SW_VERSION = "4.3-vite";
 var CACHE_NAME = SW_VERSION;
 var APP_FILES = ['./', './index.html', './icon.svg', './manifest.json'];
 
