@@ -4571,6 +4571,8 @@ function SettingsTab({s,d,isAdmin}){
   const [confirmClear,setConfirmClear]=useState(false);
   const [open,setOpen]=useState(null);
   const [legalView,setLegalView]=useState(null);
+  const [advancedMode,setAdvancedMode]=useState(()=>LS.get("ft-settings-advanced")===true);
+  const toggleAdvanced=()=>{const n=!advancedMode;setAdvancedMode(n);LS.set("ft-settings-advanced",n);if(!n&&["privacy","health"].includes(open))setOpen(null);};
 
   const saveGoals=()=>{
     d({type:"GOALS",g:{cal:parseInt(goals.cal)||2400,protein:parseInt(goals.protein)||180,carbs:parseInt(goals.carbs)||250,
@@ -4622,12 +4624,38 @@ function SettingsTab({s,d,isAdmin}){
     </div>
   );
 
+  const basicSections=[{id:"goals",l:"Goals"},{id:"profile",l:"Profile"},{id:"backup",l:"Backup"},{id:"data",l:"Data"},{id:"exercise",l:"Exercises"},{id:"reminders",l:"Reminders"},{id:"legal",l:"Legal"}];
+  const advancedSections=[{id:"privacy",l:"Privacy & Sync"},{id:"health",l:"System Health"}];
+  const visibleSections=advancedMode?[...basicSections,...advancedSections]:basicSections;
+
   return(
     <div style={{display:"flex",flexDirection:"column",paddingBottom:16}}>
-      <div style={{fontSize:18,fontWeight:800,color:V.text,marginBottom:8}}>Settings</div>
+      {/* Header + mode toggle */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:18,fontWeight:800,color:V.text}}>Settings</div>
+        <button onClick={toggleAdvanced} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:20,
+          border:`1px solid ${advancedMode?V.accent:V.cardBorder}`,
+          background:advancedMode?`${V.accent}10`:"rgba(255,255,255,0.03)",
+          cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"all .2s"}}>
+          <div style={{width:28,height:16,borderRadius:8,background:advancedMode?V.accent:"rgba(255,255,255,0.12)",
+            position:"relative",transition:"background .2s",flexShrink:0}}>
+            <div style={{width:12,height:12,borderRadius:6,background:"#fff",position:"absolute",top:2,
+              left:advancedMode?14:2,transition:"left .2s"}}/>
+          </div>
+          <span style={{fontSize:11,fontWeight:700,color:advancedMode?V.accent:V.text3,whiteSpace:"nowrap"}}>
+            {advancedMode?"Advanced":"Basic"}
+          </span>
+        </button>
+      </div>
+      {advancedMode&&(
+        <div style={{fontSize:10,color:V.text3,marginBottom:8,padding:"6px 10px",borderRadius:8,
+          background:`${V.warn}08`,border:`1px solid ${V.warn}15`}}>
+          ⚙️ Advanced mode — sync controls, system health, and developer tools visible
+        </div>
+      )}
+      {/* Section jump pills */}
       <div style={{display:"flex",gap:4,overflowX:"auto",paddingBottom:8,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
-        {[{id:"goals",l:"Goals"},{id:"profile",l:"Profile"},{id:"backup",l:"Backup"},{id:"data",l:"Data"},
-          {id:"exercise",l:"Exercises"},{id:"privacy",l:"Privacy"},{id:"reminders",l:"Reminders"},{id:"health",l:"Health"},{id:"legal",l:"Legal"}].map(s2=>(
+        {visibleSections.map(s2=>(
           <button key={s2.id} onClick={()=>setOpen(o=>o===s2.id?null:s2.id)} style={{padding:"6px 14px",borderRadius:8,whiteSpace:"nowrap",
             border:`1px solid ${open===s2.id?V.accent:V.cardBorder}`,
             background:open===s2.id?V.accent:"rgba(255,255,255,0.03)",
@@ -4821,7 +4849,12 @@ function SettingsTab({s,d,isAdmin}){
               SuccessToastCtrl.show("Data exported");
             }catch(e){SuccessToastCtrl.show("Export failed: "+e.message);}
           }}>{Icons.copy({size:14,color:V.text2})} Export All Data (JSON)</Btn>
-          <Btn v="secondary" full onClick={()=>{const dm=genDemo();dm.workouts.forEach(w=>d({type:"ADD_W",w}));dm.nutrition.forEach(n=>d({type:"ADD_N",n}));dm.body.forEach(b=>d({type:"ADD_B",b}));setOpen(null);}}>{Icons.refresh({size:14,color:V.text2})} Load Demo Data</Btn>
+          {advancedMode&&(
+            <Btn v="secondary" full onClick={()=>{const dm=genDemo();dm.workouts.forEach(w=>d({type:"ADD_W",w}));dm.nutrition.forEach(n=>d({type:"ADD_N",n}));dm.body.forEach(b=>d({type:"ADD_B",b}));setOpen(null);}}
+              s={{borderColor:`${V.warn}30`,color:V.warn}}>
+              {Icons.refresh({size:14,color:V.warn})} Load Demo Data
+            </Btn>
+          )}
           {!confirmClear?(
             <Btn v="secondary" full onClick={()=>setConfirmClear(true)} s={{borderColor:"rgba(255,107,107,0.2)"}}><span style={{color:V.danger}}>Clear All Data</span></Btn>
           ):(
@@ -4833,8 +4866,8 @@ function SettingsTab({s,d,isAdmin}){
         </div>
       </Row>
 
-      {/* Privacy Controls */}
-      <Row id="privacy" icon={Icons.target({size:16,color:V.accent2})} label="Privacy & Sync Controls"
+      {/* Privacy Controls — advanced only */}
+      {advancedMode&&<Row id="privacy" icon={Icons.target({size:16,color:V.accent2})} label="Privacy & Sync Controls"
         desc="Choose what syncs to cloud">
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {[{k:"workouts",l:"Workouts"},{k:"nutrition",l:"Nutrition"},{k:"body",l:"Body Metrics"},
@@ -4858,7 +4891,7 @@ function SettingsTab({s,d,isAdmin}){
               style={{fontSize:10,color:V.danger,fontWeight:600,textDecoration:"underline"}}>Request Cloud Deletion</a>
           </div>
         </div>
-      </Row>
+      </Row>}
 
       {/* Accessibility */}
       <Row id="a11y" icon={Icons.activity({size:16,color:V.purple})} label="Accessibility"
@@ -4932,11 +4965,13 @@ function SettingsTab({s,d,isAdmin}){
         </div>
       </Row>
 
-      {/* System Health — expandable */}
-      <Row id="health" icon={<span style={{fontSize:16}}>🛡️</span>} label="System Health"
-        desc="Sync status, data integrity, push health, storage">
-        <SystemHealthPanel s={s}/>
-      </Row>
+      {/* System Health — advanced only */}
+      {advancedMode&&(
+        <Row id="health" icon={<span style={{fontSize:16}}>🛡️</span>} label="System Health"
+          desc="Sync status, data integrity, push health, storage">
+          <SystemHealthPanel s={s}/>
+        </Row>
+      )}
 
       {/* Legal — expandable */}
       <Row id="legal" icon={Icons.chevRight({size:16,color:V.text3})} label="Legal & Privacy"
@@ -11369,6 +11404,89 @@ function PlanHub({s,d}){
   );
 }
 
+// ─── Admin: Push Broadcast ───
+function AdminPush({s,d}){
+  const email=s.profile?.email;
+  const [title,setTitle]=useState("IRONLOG");
+  const [body,setBody]=useState("");
+  const [target,setTarget]=useState(""); // blank = all users
+  const [sending,setSending]=useState(false);
+  const [result,setResult]=useState(null);
+
+  const send=async()=>{
+    if(!body.trim())return;
+    setSending(true);setResult(null);
+    try{
+      const res=await fetch(`${SYNC_URL}/api/push`,{
+        method:"POST",
+        headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
+        body:JSON.stringify({
+          action:"send",
+          title:title.trim()||"IRONLOG",
+          body:body.trim(),
+          tag:"admin-broadcast",
+          ...(target.trim()?{email:target.trim().toLowerCase()}:{})
+        })
+      });
+      const json=await res.json();
+      if(res.ok) setResult({ok:true,msg:`Sent to ${json.sent} device${json.sent!==1?"s":""} · ${json.failed||0} failed`});
+      else setResult({ok:false,msg:json.error||"Failed"});
+    }catch(e){setResult({ok:false,msg:e.message});}
+    setSending(false);
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{fontSize:16,fontWeight:800,color:V.text}}>📣 Push Broadcast</div>
+      <div style={{fontSize:11,color:V.text3}}>Send a push notification to all subscribed users, or target one by email. Works when the app is closed or phone is locked.</div>
+
+      <Card style={{padding:14,display:"flex",flexDirection:"column",gap:10}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Title</div>
+          <input value={title} onChange={e=>setTitle(e.target.value)} maxLength={64}
+            style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+              borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,boxSizing:"border-box"}}/>
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Message</div>
+          <textarea value={body} onChange={e=>setBody(e.target.value)} maxLength={200} rows={3}
+            placeholder="Type your message..."
+            style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+              borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,resize:"none",boxSizing:"border-box"}}/>
+          <div style={{fontSize:9,color:body.length>180?V.warn:V.text3,textAlign:"right",marginTop:2}}>{body.length}/200</div>
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>
+            Target email <span style={{color:V.text3,fontWeight:400,textTransform:"none"}}>(leave blank to send to ALL users)</span>
+          </div>
+          <input value={target} onChange={e=>setTarget(e.target.value)} placeholder="user@example.com or leave blank"
+            style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+              borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,boxSizing:"border-box"}}/>
+        </div>
+
+        {result&&(
+          <div style={{padding:"10px 12px",borderRadius:8,
+            background:result.ok?`${V.accent}10`:`${V.danger}10`,
+            border:`1px solid ${result.ok?V.accent+"30":V.danger+"30"}`,
+            fontSize:12,color:result.ok?V.accent:V.danger,fontWeight:600}}>
+            {result.ok?"✅ ":"❌ "}{result.msg}
+          </div>
+        )}
+
+        <Btn full onClick={send} disabled={!body.trim()||sending}
+          s={{background:sending?"rgba(255,255,255,0.06)":undefined}}>
+          {sending?"Sending…":`📣 Send ${target.trim()?"to "+target.split("@")[0]:"to All Users"}`}
+        </Btn>
+
+        <div style={{fontSize:10,color:V.text3,textAlign:"center",lineHeight:1.5}}>
+          Only users who granted notification permission will receive this.<br/>
+          iOS requires the app to be installed to home screen.
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Admin Hub (admin nav tab — only renders for admins) ───
 function AdminHub({s,d}){
   const Section=({icon,label,desc,color,tab})=>(
@@ -11400,6 +11518,7 @@ function AdminHub({s,d}){
       <Section icon="🔍" label="User Lookup" desc="Full drill-down — workouts, photos, vault, settings" color={V.purple} tab="admin_lookup"/>
       <Section icon="💬" label="Content Moderation" desc="View DMs, group chats, activity" color="#ec4899" tab="admin_moderation"/>
       <Section icon="🩺" label="Platform Health" desc="Stale users, sync issues, session data" color={V.warn} tab="admin_health"/>
+      <Section icon="📣" label="Push Broadcast" desc="Send notifications to all users or a specific user" color={V.danger} tab="admin_push"/>
     </div>
   );
 }
@@ -12199,6 +12318,7 @@ function App(){
         {s.tab==="admin_lookup"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminPanel s={s} initialView="lookup"/></div>}
         {s.tab==="admin_moderation"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminPanel s={s} initialView="moderation"/></div>}
         {s.tab==="admin_health"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminPanel s={s} initialView="health"/></div>}
+        {s.tab==="admin_push"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminPush s={s} d={d}/></div>}
 
         {s.tab==="admin"&&isAdmin&&<AdminHub s={s} d={d}/>}
 
