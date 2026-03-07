@@ -195,6 +195,7 @@ const SessionManager={
         LS.set("ft-session-token",json.token);
         LS.set("ft-session-email",email.toLowerCase());
         LS.set("ft-session-expires",json.expires_at);
+        Cookie.set("ironlog_session",json.token,30); // SSO across subdomains
         return{success:true,token:json.token};
       }
       return{success:false,error:json.error,attempts_remaining:json.attempts_remaining};
@@ -213,6 +214,7 @@ const SessionManager={
     const token=LS.get("ft-session-token");
     if(token){try{await fetch(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json","X-Session-Token":token},body:JSON.stringify({action:"revoke",token})});}catch(e){}}
     LS.set("ft-session-token",null);LS.set("ft-session-email",null);LS.set("ft-session-expires",null);LS.set("ft-is-admin",null);
+    Cookie.clear("ironlog_session"); // Clear SSO cookie
   },
   // Check admin status (silent — never exposes admin to non-admins)
   checkAdmin:async()=>{
@@ -304,9 +306,16 @@ const Undo={
   clear:()=>{if(Undo._timer)clearTimeout(Undo._timer);if(Undo._setItem)Undo._setItem(null);if(Undo._setRemaining)Undo._setRemaining(0);},
 };
 
+// ─── Cookie helper (for SSO across ironlog.space subdomains) ───
+const Cookie={
+  get:(name)=>{const m=document.cookie.match(new RegExp("(^| )"+name+"=([^;]+)"));return m?decodeURIComponent(m[2]):null;},
+  set:(name,value,days=30)=>{const exp=new Date(Date.now()+days*864e5).toUTCString();document.cookie=`${name}=${encodeURIComponent(value)};expires=${exp};domain=.ironlog.space;path=/;secure;samesite=lax`;},
+  clear:(name)=>{document.cookie=`${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;domain=.ironlog.space;path=/;secure`;},
+};
+
 // ─── Cloud Sync Engine ───
 // I12: Allow localStorage override of API URL for dev/staging environments
-const SYNC_URL=LS.get("ft-api-url")||"https://ironlog-api.vercel.app";
+const SYNC_URL=LS.get("ft-api-url")||"https://api.ironlog.space";
 let syncTimer=null;
 let syncInFlight=false;
 
@@ -12801,9 +12810,42 @@ function App(){
       try{
         const data={};
         ["ft-w","ft-n","ft-b","ft-ex","ft-g","ft-sched","ft-units","ft-onb","ft-photos","ft-profile","ft-checkins","ft-milestones","ft-phases","ft-injuries","ft-syncprefs","ft-a11y"].forEach(k=>{const v=LS.get(k);if(v!==null)data[k]=v;});
+        const localOnboarded=data["ft-onb"]||false;
+        // ── SSO: if not onboarded locally but SSO cookie exists, try silent login ──
+        if(!localOnboarded&&!data["ft-session-token"]){
+          const ssoToken=Cookie.get("ironlog_session");
+          if(ssoToken){
+            try{
+              const vRes=await fetch(`${SYNC_URL}/api/auth/session`,{method:"POST",
+                headers:{"Content-Type":"application/json","X-Session-Token":ssoToken},
+                body:JSON.stringify({action:"validate"})});
+              const vJson=await vRes.json();
+              if(vJson.valid&&vJson.email){
+                // Valid SSO — pull data from cloud
+                const deviceId=LS.get("ft-device-id")||uid();
+                LS.set("ft-device-id",deviceId);
+                LS.set("ft-session-token",ssoToken);
+                LS.set("ft-session-email",vJson.email);
+                const pull=await CloudSync.pull(vJson.email,deviceId,null);
+                if(pull?.success&&pull?.data){
+                  const cloud=pull.data;
+                  d({type:"INIT",p:{
+                    workouts:cloud.workouts||[],nutrition:cloud.nutrition||[],body:cloud.body||[],
+                    exercises:cloud.exercises||defaultExercises,goals:cloud.goals||init.goals,
+                    schedule:cloud.schedule||defaultSchedule,units:cloud.units||"lbs",
+                    onboarded:true,photos:cloud.photos||[],profile:cloud.profile||init.profile,
+                    checkins:cloud.checkins||[],milestones:cloud.milestones||[],
+                    phases:cloud.phases||[],injuries:cloud.injuries||[],
+                    syncPrefs:cloud.syncPrefs||init.syncPrefs,a11y:data["ft-a11y"]||init.a11y}});
+                  return;
+                }
+              }
+            }catch(e){/* SSO failed silently — fall through to normal boot */}
+          }
+        }
         d({type:"INIT",p:{workouts:data["ft-w"]||[],nutrition:data["ft-n"]||[],body:data["ft-b"]||[],
           exercises:data["ft-ex"]||defaultExercises,goals:data["ft-g"]||init.goals,schedule:data["ft-sched"]||defaultSchedule,
-          units:data["ft-units"]||"lbs",onboarded:data["ft-onb"]||false,photos:data["ft-photos"]||[],
+          units:data["ft-units"]||"lbs",onboarded:localOnboarded,photos:data["ft-photos"]||[],
           profile:data["ft-profile"]||init.profile,checkins:data["ft-checkins"]||[],milestones:data["ft-milestones"]||[],
           phases:data["ft-phases"]||[],injuries:data["ft-injuries"]||[],
           syncPrefs:data["ft-syncprefs"]||init.syncPrefs,a11y:data["ft-a11y"]||init.a11y}});
