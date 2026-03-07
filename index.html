@@ -693,6 +693,7 @@ const Icons = {
   download: (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>}/>,
   upload: (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>}/>,
   hash: (p) => <Icon {...p} d={<><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>}/>,
+  sliders: (p) => <Icon {...p} d={<><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></>}/>,
 };
 
 // ─── Helpers ───
@@ -1283,6 +1284,12 @@ function UndoToast({d}){
     Undo._duration=UNDO_DURATION;
     return()=>{Undo._setItem=null;Undo._setRemaining=null;};
   },[]);
+  // Tick the countdown bar down in real-time
+  useEffect(()=>{
+    if(!item||remaining<=0)return;
+    const iv=setInterval(()=>setRemaining(r=>Math.max(0,r-100)),100);
+    return()=>clearInterval(iv);
+  },[item,remaining>0]);
   if(!item)return null;
   const doUndo=()=>{
     const u=Undo.get();if(!u)return;
@@ -9735,7 +9742,8 @@ function SocialTab({s,d}){
       ]}/>
 
       <SectionGrid d={d} title="Connections" items={[
-        {id:"social_friends",icon:Icons.target,label:"Friends",desc:"Add, compare & message",color:"#06b6d4"},
+        {id:"social_messages",icon:Icons.activity,label:"Messages",desc:"iMessage-style DMs",color:"#22c55e"},
+        {id:"social_friends",icon:Icons.target,label:"Friends",desc:"Add, compare & manage",color:"#06b6d4"},
         {id:"social_groups",icon:Icons.target,label:"Groups",desc:"Crews, leaderboards & stats",color:"#f59e0b"},
         {id:"social_compare",icon:Icons.chart,label:"You vs Best",desc:"Personal records race",color:"#a78bfa"},
       ]}/>
@@ -10345,6 +10353,768 @@ function SocialFriends({s,d}){
         </Card>
       )}
       {loading&&!loadErr&&<div><SkeletonCard lines={2}/><div style={{height:8}}/><SkeletonCard lines={3}/></div>}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  MESSAGES TAB — iMessage-style DM inbox + full chat view
+// ═══════════════════════════════════════════════════════════
+function MessagesTab({s,d}){
+  const email=s.profile?.email;
+  const displayName=s.profile?.firstName||email?.split("@")[0]||"You";
+  const [friends,setFriends]=useState(null);
+  const [activeChat,setActiveChat]=useState(null); // friend object or null (inbox)
+  const [search,setSearch]=useState("");
+  const [loading,setLoading]=useState(true);
+  const [tick,setTick]=useState(0); // forces re-render to pick up LS unread changes
+
+  useEffect(()=>{
+    if(!email)return;
+    setLoading(true);
+    SocialAPI.getFriends(email).then(r=>{
+      if(r)setFriends(r);
+      setLoading(false);
+    });
+  },[email]);
+
+  // Re-render inbox every 10s so LS-backed unread counts + previews stay live
+  useEffect(()=>{
+    const iv=setInterval(()=>setTick(t=>t+1),10000);
+    return()=>clearInterval(iv);
+  },[]);
+
+  // Auto-open from push notification
+  useEffect(()=>{
+    const fromEmail=LS.get("ft-open-dm-from");
+    if(fromEmail&&friends?.friends){
+      const f=friends.friends.find(fr=>fr.email===fromEmail);
+      if(f){setActiveChat(f);}
+      // Always clear after attempting — prevents stale auto-opens on next launch
+      LS.set("ft-open-dm-from",null);
+    }
+  },[friends]);
+
+  if(activeChat){
+    return <IMConversation
+      s={s} email={email} displayName={displayName}
+      friend={activeChat}
+      onBack={()=>{setActiveChat(null);if(email)SocialAPI.getFriends(email).then(r=>{if(r)setFriends(r);});}}
+    />;
+  }
+
+  // Build inbox rows — sorted by last message time desc
+  const friendList=(friends?.friends||[]).filter(f=>{
+    if(!search)return true;
+    const q=search.toLowerCase();
+    return (f.name||"").toLowerCase().includes(q)||(f.username||"").toLowerCase().includes(q);
+  });
+  const getLastMsg=(f)=>{ const cached=LS.get(`ft-dm-${f.email}`)||[]; return cached[cached.length-1]||null; };
+  const getUnread=(f)=>parseInt(LS.get(`ft-unread-${f.email}`))||0;
+  const sorted=[...friendList].sort((a,b)=>{
+    const at=getLastMsg(a)?.ts||"0"; const bt=getLastMsg(b)?.ts||"0";
+    return bt.localeCompare(at);
+  });
+  const pending=friends?.incoming||[];
+
+  // Format timestamp for inbox row (iMessage style)
+  const fmtInboxTime=(ts)=>{
+    if(!ts)return"";
+    const d2=new Date(ts),now=new Date();
+    const diff=(now-d2)/1000;
+    if(diff<60)return"now";
+    if(diff<3600)return`${Math.floor(diff/60)}m`;
+    // Fix 9: use calendar day comparison, not 24h window
+    const todayStr=now.toDateString();
+    const yesterdayStr=new Date(now-86400000).toDateString();
+    const msgDayStr=d2.toDateString();
+    if(msgDayStr===todayStr)return d2.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    if(msgDayStr===yesterdayStr)return"Yesterday";
+    if(diff<604800)return d2.toLocaleDateString([],{weekday:"short"});
+    return d2.toLocaleDateString([],{month:"numeric",day:"numeric"});
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 120px)"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0 12px"}}>
+        <button onClick={()=>d({type:"TAB",tab:"social"})} style={{background:"none",border:"none",display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:0}}>
+          <svg width="9" height="16" viewBox="0 0 9 16" fill="none"><path d="M8 1L1 8L8 15" stroke={V.accent} strokeWidth="2.2" strokeLinecap="round"/></svg>
+          <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Social</span>
+        </button>
+        <div style={{fontSize:17,fontWeight:800,color:V.text}}>Messages</div>
+        <button onClick={()=>d({type:"TAB",tab:"social_friends"})} style={{background:"none",border:"none",cursor:"pointer",padding:"4px 8px"}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={V.accent} strokeWidth="2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        </button>
+      </div>
+
+      {/* Search bar */}
+      <div style={{position:"relative",marginBottom:10}}>
+        <div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search"
+          style={{width:"100%",padding:"9px 12px 9px 34px",background:"rgba(255,255,255,0.06)",
+            border:"none",borderRadius:12,color:V.text,fontSize:14,outline:"none",fontFamily:V.font,boxSizing:"border-box"}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",
+          background:"rgba(255,255,255,0.15)",border:"none",borderRadius:10,width:18,height:18,cursor:"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",color:V.text3,fontSize:10}}>✕</button>}
+      </div>
+
+      {/* Pending requests banner */}
+      {pending.length>0&&(
+        <button onClick={()=>d({type:"TAB",tab:"social_friends"})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+          background:`${V.accent}08`,border:`1px solid ${V.accent}20`,borderRadius:12,cursor:"pointer",marginBottom:8,width:"100%",textAlign:"left"}}>
+          <div style={{width:36,height:36,borderRadius:18,background:V.accent,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <span style={{fontSize:16}}>👥</span>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:V.accent}}>{pending.length} friend request{pending.length>1?"s":""}</div>
+            <div style={{fontSize:11,color:V.text3}}>Tap to review</div>
+          </div>
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="none"><path d="M1 1l6 6-6 6" stroke={V.text3} strokeWidth="1.8" strokeLinecap="round"/></svg>
+        </button>
+      )}
+
+      {/* Conversation list */}
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        {loading&&[0,1,2,3].map(i=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${V.cardBorder}`}}>
+            <div style={{width:52,height:52,borderRadius:26,background:"rgba(255,255,255,0.06)",flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{height:13,width:"40%",borderRadius:6,background:"rgba(255,255,255,0.06)",marginBottom:6}}/>
+              <div style={{height:11,width:"70%",borderRadius:6,background:"rgba(255,255,255,0.04)"}}/>
+            </div>
+          </div>
+        ))}
+        {!loading&&sorted.length===0&&(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:12}}>💬</div>
+            <div style={{fontSize:16,fontWeight:700,color:V.text,marginBottom:6}}>No Messages Yet</div>
+            <div style={{fontSize:13,color:V.text3,lineHeight:1.6}}>Add friends to start chatting</div>
+            <button onClick={()=>d({type:"TAB",tab:"social_friends"})} style={{marginTop:16,padding:"10px 24px",
+              background:V.accent,border:"none",borderRadius:20,cursor:"pointer",fontSize:13,fontWeight:700,color:V.bg,fontFamily:V.font}}>
+              Add Friends
+            </button>
+          </div>
+        )}
+        {sorted.map((f,i)=>{
+          const last=getLastMsg(f);
+          const unread=getUnread(f);
+          const isOwn=last?.isOwn||last?.from===email;
+          let preview=last?.text||"";
+          if(last?.imageData)preview="📷 Photo";
+          if(preview.length>32)preview=preview.slice(0,32)+"…";
+          return(
+          <button key={f.email} onClick={()=>{setActiveChat(f);LS.set(`ft-unread-${f.email}`,0);}}
+            style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"10px 0",
+              background:"none",border:"none",cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",
+              borderBottom:`1px solid ${V.cardBorder}`}}>
+            {/* Avatar */}
+            <div style={{position:"relative",flexShrink:0}}>
+              <div style={{width:52,height:52,borderRadius:26,overflow:"hidden",
+                background:f.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
+                display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {f.avatar
+                  ?<img src={f.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+                  :<span style={{fontSize:20,color:"#fff",fontWeight:800}}>{(f.name||"?")[0].toUpperCase()}</span>}
+              </div>
+              {unread>0&&<div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:9,
+                background:V.accent,border:`2px solid ${V.bg}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:9,fontWeight:800,color:V.bg}}>{unread>9?"9+":unread}</span>
+              </div>}
+            </div>
+            {/* Content */}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
+                <span style={{fontSize:15,fontWeight:unread>0?700:500,color:V.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>{f.name||"Unknown"}</span>
+                <span style={{fontSize:11,color:unread>0?V.accent:V.text3,fontWeight:unread>0?600:400,flexShrink:0,marginLeft:4}}>{fmtInboxTime(last?.ts)}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:3,minWidth:0}}>
+                {isOwn&&last&&<span style={{fontSize:13,color:V.text3,flexShrink:0}}>You: </span>}
+                <span style={{fontSize:13,color:unread>0?V.text2:V.text3,fontWeight:unread>0?500:400,
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{preview||"Tap to chat"}</span>
+              </div>
+            </div>
+            <svg width="8" height="14" viewBox="0 0 8 14" fill="none" style={{flexShrink:0}}>
+              <path d="M1 1l6 6-6 6" stroke={V.text3} strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── iMessage-style conversation view ───
+function IMConversation({s,email,displayName,friend,onBack}){
+  const [messages,setMessages]=useState(()=>LS.get(`ft-dm-${friend.email}`)||[]);
+  const [input,setInput]=useState("");
+  const [imgPreview,setImgPreview]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [hasMore,setHasMore]=useState(false);
+  const [oldestCursor,setOldestCursor]=useState(null);
+  const [loadingOlder,setLoadingOlder]=useState(false);
+  const [reacting,setReacting]=useState(null); // message id being reacted to
+  const [reactions,setReactions]=useState(()=>LS.get(`ft-reactions-${friend.email}`)||{});
+  const [friendInfo,setFriendInfo]=useState(false); // friend info sheet open
+  const [typing,setTyping]=useState(false);           // friend typing indicator
+  const typingTimeoutRef=useRef(null);
+  const endRef=useRef(null);
+  const inputRef=useRef(null);
+  const imgRef=useRef(null);
+  const listRef=useRef(null);
+
+  // Load from server on mount
+  useEffect(()=>{
+    setLoading(true);
+    SocialAPI.getDMs(email,friend.email).then(r=>{
+      if(r?.messages){
+        const lastFriendRead=r.friendLastRead||null;
+        const msgs=(r.messages||[]).map(m=>({
+          ...m,imageData:m.data?.imageData||m.imageData||null,
+          text:m.data?.imageData?"📷 Photo":(m.text||""),
+          read:m.isOwn&&lastFriendRead&&new Date(m.ts)<=new Date(lastFriendRead)
+        }));
+        setMessages(msgs);LS.set(`ft-dm-${friend.email}`,msgs);
+        // Seed lastMsgTsRef so the 8s poller doesn't fire on first tick
+        lastMsgTsRef.current=msgs.slice(-1)[0]?.ts||null;
+        setHasMore(!!r.hasMore);
+        if(r.hasMore&&r.nextCursor)setOldestCursor(r.nextCursor);
+      }
+      setLoading(false);
+    });
+    SocialAPI.markDMsRead(email,friend.email);
+    // Fix 3: set ft-last-read so the global poller doesn't re-count these as unread
+    LS.set(`ft-last-read-${friend.email}`,new Date().toISOString());
+    LS.set(`ft-unread-${friend.email}`,0);
+  },[]);
+
+  // Bug 10: scroll after messages render, not on a fixed timer
+  const didInitScroll=useRef(false);
+  useEffect(()=>{
+    if(!loading&&!didInitScroll.current){
+      didInitScroll.current=true;
+      endRef.current?.scrollIntoView({behavior:"instant"});
+    }
+  },[loading,messages.length]);
+
+  const scrollToBottom=(smooth)=>requestAnimationFrame(()=>endRef.current?.scrollIntoView({behavior:smooth?"smooth":"instant"}));
+
+  const loadOlder=()=>{
+    if(!oldestCursor||loadingOlder)return;
+    setLoadingOlder(true);
+    // Fix 6: save scroll anchor before prepending
+    const list=listRef.current;
+    const prevScrollHeight=list?list.scrollHeight:0;
+    SocialAPI.getDMs(email,friend.email,oldestCursor).then(r=>{
+      if(r?.messages){
+        const lastFriendRead=r.friendLastRead||null;
+        const older=(r.messages||[]).map(m=>({...m,
+          imageData:m.data?.imageData||m.imageData||null,
+          text:m.data?.imageData?"📷 Photo":(m.text||""),
+          read:m.isOwn&&lastFriendRead&&new Date(m.ts)<=new Date(lastFriendRead)}));
+        setMessages(prev=>[...older,...prev]);
+        setHasMore(!!r.hasMore);
+        setOldestCursor(r.hasMore&&r.nextCursor?r.nextCursor:null);
+        // Restore scroll position so view doesn't jump
+        requestAnimationFrame(()=>{
+          if(list)list.scrollTop=list.scrollHeight-prevScrollHeight;
+        });
+      }
+      setLoadingOlder(false);
+    });
+  };
+
+  // Bug 8: Poll for new messages every 8s while in conversation
+  const lastMsgTsRef=useRef(null);
+  useEffect(()=>{
+    const poll=setInterval(()=>{
+      SocialAPI.getDMs(email,friend.email).then(r=>{
+        if(!r?.messages)return;
+        const lastFriendRead=r.friendLastRead||null;
+        const incoming=(r.messages||[]).map(m=>({
+          ...m,imageData:m.data?.imageData||m.imageData||null,
+          text:m.data?.imageData?"📷 Photo":(m.text||""),
+          read:m.isOwn&&lastFriendRead&&new Date(m.ts)<=new Date(lastFriendRead)
+        }));
+        // Only update if newest message is newer than what we have
+        const serverNewest=incoming.slice(-1)[0]?.ts;
+        const localNewest=lastMsgTsRef.current;
+        const latestIsFriend=incoming.slice(-1)[0]&&!(incoming.slice(-1)[0].isOwn||incoming.slice(-1)[0].from===email);
+        // Fix 10: show typing indicator briefly when friend just sent something new
+        if(serverNewest&&serverNewest!==localNewest&&latestIsFriend){
+          setTyping(true);
+          if(typingTimeoutRef.current)clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current=setTimeout(()=>setTyping(false),1200);
+        }
+        if(serverNewest&&serverNewest!==localNewest){
+          lastMsgTsRef.current=serverNewest;
+          // Fix 4+5: merge — keep optimistic local messages & older loaded history
+          setMessages(prev=>{
+            // Keep any "older than server's window" messages already loaded
+            const serverOldest=incoming[0]?.ts||"9999";
+            const olderLocal=prev.filter(m=>m.ts<serverOldest);
+            // Keep optimistic messages (own, no server id yet) newer than server newest
+            const optimistic=prev.filter(m=>(m.isOwn||m.from===email)&&m.ts>serverNewest&&m.imageData);
+            const merged=[...olderLocal,...incoming,...optimistic];
+            // Deduplicate by id keeping latest
+            const seen=new Map();
+            merged.forEach(m=>{if(!seen.has(m.id)||m.ts>seen.get(m.id).ts)seen.set(m.id,m);});
+            const final=[...seen.values()].sort((a,b)=>a.ts.localeCompare(b.ts)).slice(-200);
+            LS.set(`ft-dm-${friend.email}`,final);
+            return final;
+          });
+          // Auto-scroll only if we're near the bottom
+          const list=listRef.current;
+          if(list){const nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<80;if(nearBottom)scrollToBottom(true);}
+          SocialAPI.markDMsRead(email,friend.email);
+          LS.set(`ft-last-read-${friend.email}`,new Date().toISOString());
+          LS.set(`ft-unread-${friend.email}`,0);
+        }
+      });
+    },8000);
+    return()=>clearInterval(poll);
+  },[email,friend.email]);
+
+  const handleImg=async(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    const c=await compressImage(file,600,0.72);
+    if(c)setImgPreview(c);
+    e.target.value="";
+  };
+
+  const send=()=>{
+    if(!input.trim()&&!imgPreview)return;
+    Haptic.light();
+    const now=new Date().toISOString();
+    if(imgPreview){
+      const msg={id:uid(),from:email,name:displayName,text:"📷 Photo",imageData:imgPreview,ts:now,isOwn:true,read:false};
+      setMessages(prev=>{const u=[...prev,msg].slice(-150);LS.set(`ft-dm-${friend.email}`,u);lastMsgTsRef.current=now;return u;});
+      SocialAPI.sendDMImage(email,friend.email,imgPreview,displayName);
+      SocialAPI.notifyDM(email,friend.email,displayName,"",true);
+      setImgPreview(null);
+    }
+    if(input.trim()){
+      const msg={id:uid(),from:email,name:displayName,text:input.trim(),ts:now,isOwn:true,read:false};
+      setMessages(prev=>{const u=[...prev,msg].slice(-150);LS.set(`ft-dm-${friend.email}`,u);lastMsgTsRef.current=now;return u;});
+      SocialAPI.sendDM(email,friend.email,input.trim(),displayName);
+      SocialAPI.notifyDM(email,friend.email,displayName,input.trim(),false);
+      setInput("");
+    }
+    scrollToBottom(true);
+  };
+
+  const handleInput=(v)=>setInput(v);
+
+  const addReaction=(msgId,emoji)=>{
+    const updated={...reactions,[msgId]:emoji};
+    setReactions(updated);LS.set(`ft-reactions-${friend.email}`,updated);
+    setReacting(null);
+  };
+
+  // Bug 11: dismiss reaction picker on outside tap
+  useEffect(()=>{
+    if(!reacting)return;
+    const dismiss=(e)=>{
+      if(!e.target.closest("[data-reaction-bubble]"))setReacting(null);
+    };
+    document.addEventListener("pointerdown",dismiss);
+    return()=>document.removeEventListener("pointerdown",dismiss);
+  },[reacting]);
+
+  // Group messages: consecutive same-sender messages form a group
+  // Insert date separators between groups on different days
+  const buildGroups=()=>{
+    const out=[];
+    let lastDate="";
+    let curGroup=null;
+    messages.forEach((m,i)=>{
+      const d2=new Date(m.ts);
+      const dateKey=d2.toDateString();
+      if(dateKey!==lastDate){
+        if(curGroup)out.push(curGroup);
+        curGroup=null;
+        const now=new Date();
+        const todayKey=now.toDateString();
+        const yesterdayKey=new Date(now-86400000).toDateString();
+        const diff=(now-d2)/86400000;
+        let label=dateKey===todayKey?"Today":dateKey===yesterdayKey?"Yesterday":diff<7?d2.toLocaleDateString([],{weekday:"long"}):d2.toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"});
+        out.push({type:"date",label,key:"d-"+dateKey});
+        lastDate=dateKey;
+      }
+      const isOwn=m.isOwn||m.from===email;
+      if(!curGroup||curGroup.isOwn!==isOwn){
+        if(curGroup)out.push(curGroup);
+        curGroup={type:"group",isOwn,msgs:[m],key:"g-"+(m.id||i)};
+      } else {
+        curGroup.msgs.push(m);
+      }
+    });
+    if(curGroup)out.push(curGroup);
+    return out;
+  };
+  const groups=useMemo(()=>buildGroups(),[messages,email]);
+  const lastOwnMsg=useMemo(()=>messages.filter(m=>m.isOwn||m.from===email).slice(-1)[0],[messages,email]);
+
+  const quickMsgs=["💪 Nice PR!","🔥 Let's train","⏰ Don't skip today","👏 Keep it up","🏋️ Gym time?","🤝 You've got this"];
+  const emojiReacts=["❤️","💪","🔥","😂","👍","😮"];
+
+  // Bug 6: stabilize FriendAvatar with useMemo so React doesn't unmount on every render
+  const FriendAvatar=useMemo(()=>({size=28})=>(
+    <div style={{width:size,height:size,borderRadius:size/2,overflow:"hidden",flexShrink:0,
+      background:friend.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
+      display:"flex",alignItems:"center",justifyContent:"center",alignSelf:"flex-end"}}>
+      {friend.avatar
+        ?<img src={friend.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+        :<span style={{fontSize:size*0.4,color:"#fff",fontWeight:800}}>{(friend.name||"?")[0].toUpperCase()}</span>}
+    </div>
+  ),[friend.avatar,friend.name]);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 100px)"}}>
+      {/* ── Header ── */}
+      <div style={{display:"flex",alignItems:"center",gap:10,paddingBottom:10,borderBottom:`1px solid ${V.cardBorder}`,flexShrink:0}}>
+        <button onClick={onBack} style={{background:"none",border:"none",display:"flex",alignItems:"center",gap:2,cursor:"pointer",padding:"4px 0",flexShrink:0}}>
+          <svg width="9" height="16" viewBox="0 0 9 16" fill="none"><path d="M8 1L1 8L8 15" stroke={V.accent} strokeWidth="2.2" strokeLinecap="round"/></svg>
+          {/* Unread count badge on back arrow */}
+        </button>
+        {/* Tappable avatar/name — opens friend info sheet (Bug 3 fix: was calling onBack) */}
+        <button onClick={()=>setFriendInfo(true)} style={{flex:1,display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:0}}>
+          <div style={{width:36,height:36,borderRadius:18,overflow:"hidden",flexShrink:0,
+            background:friend.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {friend.avatar
+              ?<img src={friend.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+              :<span style={{fontSize:14,color:"#fff",fontWeight:800}}>{(friend.name||"?")[0].toUpperCase()}</span>}
+          </div>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:V.text,lineHeight:1.2}}>{friend.name||"Unknown"}</div>
+            {friend.username&&<div style={{fontSize:11,color:V.text3,marginTop:1}}>@{friend.username}</div>}
+          </div>
+        </button>
+        {/* Video call placeholder — visual parity with iMessage */}
+        <button style={{background:"none",border:"none",cursor:"default",padding:"4px 6px",opacity:0.35}}>
+          <svg width="22" height="16" viewBox="0 0 24 18" fill="none" stroke={V.accent} strokeWidth="2" strokeLinecap="round"><rect x="1" y="2" width="15" height="14" rx="2"/><path d="M16 7l6-4v12l-6-4"/></svg>
+        </button>
+        <button style={{background:"none",border:"none",cursor:"default",padding:"4px 6px",opacity:0.35}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={V.accent} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+
+      {/* ── Message list ── */}
+      <div ref={listRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",display:"flex",flexDirection:"column",
+        padding:"8px 0",gap:0}}>
+
+        {/* Load older */}
+        {hasMore&&(
+          <div style={{textAlign:"center",padding:"6px 0 10px"}}>
+            <button onClick={loadOlder} disabled={loadingOlder} style={{background:"none",border:"none",
+              fontSize:12,color:V.accent,cursor:loadingOlder?"default":"pointer",padding:"4px 12px",fontFamily:V.font}}>
+              {loadingOlder?"Loading…":"↑ Load older"}
+            </button>
+          </div>
+        )}
+
+        {loading&&messages.length===0&&(
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:40,marginBottom:8}}>💬</div>
+              <div style={{fontSize:12,color:V.text3}}>Loading messages…</div>
+            </div>
+          </div>
+        )}
+
+        {!loading&&messages.length===0&&(
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{textAlign:"center",padding:"0 32px"}}>
+              <div style={{width:72,height:72,borderRadius:36,overflow:"hidden",
+                background:friend.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
+                display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                {friend.avatar
+                  ?<img src={friend.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+                  :<span style={{fontSize:28,color:"#fff",fontWeight:800}}>{(friend.name||"?")[0].toUpperCase()}</span>}
+              </div>
+              <div style={{fontSize:16,fontWeight:700,color:V.text,marginBottom:4}}>{friend.name}</div>
+              {friend.username&&<div style={{fontSize:12,color:V.text3,marginBottom:12}}>@{friend.username}</div>}
+              <div style={{fontSize:12,color:V.text3}}>Say hi 👋</div>
+            </div>
+          </div>
+        )}
+
+        {groups.map(g=>{
+          if(g.type==="date")return(
+            <div key={g.key} style={{textAlign:"center",padding:"10px 0 6px"}}>
+              <span style={{fontSize:11,color:V.text3,fontWeight:600,background:V.bg,padding:"2px 10px",borderRadius:8}}>{g.label}</span>
+            </div>
+          );
+
+          const isOwn=g.isOwn;
+          return(
+            <div key={g.key} style={{display:"flex",flexDirection:"column",gap:2,
+              alignItems:isOwn?"flex-end":"flex-start",padding:"2px 12px",marginBottom:4}}>
+              {/* For friend messages: avatar only next to LAST message in group */}
+              {g.msgs.map((m,mi)=>{
+                const isLast=mi===g.msgs.length-1;
+                const isFirst=mi===0;
+                const reaction=reactions[m.id];
+                // Bubble radius: iMessage groups: first/last have different corners
+                const br=isOwn
+                  ?{borderTopLeftRadius:18,borderTopRightRadius:isFirst?18:6,borderBottomRightRadius:isLast?4:6,borderBottomLeftRadius:18}
+                  :{borderTopLeftRadius:isFirst?18:6,borderTopRightRadius:18,borderBottomRightRadius:18,borderBottomLeftRadius:isLast?4:6};
+                const showAvatar=!isOwn&&isLast;
+                const isLastOwn=lastOwnMsg&&m.id===lastOwnMsg.id;
+
+                return(
+                  <div key={m.id||mi} style={{display:"flex",alignItems:"flex-end",gap:6,
+                    flexDirection:isOwn?"row-reverse":"row",maxWidth:"82%"}}>
+                    {/* Avatar slot */}
+                    {!isOwn&&(showAvatar?<FriendAvatar size={28}/>:<div style={{width:28,flexShrink:0}}/>)}
+
+                    <div style={{display:"flex",flexDirection:"column",alignItems:isOwn?"flex-end":"flex-start"}}>
+                      {/* Long-press → reaction picker (tap on mobile = onDoubleClick fallback) */}
+                      <div onDoubleClick={()=>setReacting(reacting===m.id?null:m.id)}
+                        data-reaction-bubble="1"
+                        style={{position:"relative"}}>
+                        {/* Bubble */}
+                        {m.imageData?(
+                          <div style={{...br,overflow:"hidden",position:"relative",cursor:"pointer"}}>
+                            <img src={m.imageData} alt="Photo"
+                              style={{display:"block",maxWidth:220,maxHeight:260,objectFit:"cover"}}/>
+                            {/* Time overlay on image — no checkmarks, Read/Delivered shows below like text bubbles */}
+                            <div style={{position:"absolute",bottom:6,right:8,fontSize:10,
+                              color:"rgba(255,255,255,0.9)",background:"rgba(0,0,0,0.4)",
+                              borderRadius:6,padding:"2px 6px"}}>
+                              {new Date(m.ts).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+                            </div>
+                          </div>
+                        ):(
+                          <div style={{
+                            ...br,
+                            padding:"8px 13px",
+                            background:isOwn?V.accent:"rgba(255,255,255,0.08)",
+                            border:isOwn?"none":`1px solid rgba(255,255,255,0.06)`,
+                            cursor:"default",
+                          }}>
+                            <div style={{fontSize:15,color:isOwn?V.bg:V.text,lineHeight:1.4,wordBreak:"break-word"}}>{m.text}</div>
+                          </div>
+                        )}
+                        {/* Reaction pill */}
+                        {reaction&&(
+                          <div style={{position:"absolute",bottom:-10,right:isOwn?4:"auto",left:isOwn?"auto":4,
+                            background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:10,
+                            padding:"1px 6px",fontSize:13,zIndex:2}}>{reaction}</div>
+                        )}
+                        {/* Reaction picker popover */}
+                        {reacting===m.id&&(
+                          <div style={{position:"absolute",bottom:"calc(100% + 8px)",
+                            right:isOwn?0:"auto",left:isOwn?"auto":0,
+                            background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:20,
+                            padding:"6px 10px",display:"flex",gap:6,zIndex:10,
+                            boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+                            {emojiReacts.map(e=>(
+                              <button key={e} onClick={()=>addReaction(m.id,e)} style={{background:"none",border:"none",
+                                fontSize:20,cursor:"pointer",padding:"2px",borderRadius:8,
+                                WebkitTapHighlightColor:"transparent"}}>{e}</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {/* Timestamp — only under last message in group (iMessage style) */}
+                      {isLast&&(
+                        <div style={{display:"flex",alignItems:"center",gap:4,marginTop:3,
+                          justifyContent:isOwn?"flex-end":"flex-start",padding:"0 2px"}}>
+                          <span style={{fontSize:10,color:V.text3}}>
+                            {new Date(m.ts).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+                          </span>
+                        </div>
+                      )}
+                      {/* Bug 5: iMessage shows "Read" text only under the last sent message, no checkmarks */}
+                      {isOwn&&isLastOwn&&isLast&&(
+                        <div style={{fontSize:10,color:m.read?V.accent:V.text3,marginTop:1,padding:"0 2px",transition:"color .3s"}}>
+                          {m.read?"Read":"Delivered"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {/* Typing indicator (three animated dots) */}
+        {typing&&(
+          <div style={{display:"flex",alignItems:"flex-end",gap:6,padding:"4px 12px"}}>
+            <FriendAvatar size={28}/>
+            <div style={{background:"rgba(255,255,255,0.08)",border:`1px solid rgba(255,255,255,0.06)`,
+              borderRadius:"18px 18px 18px 4px",padding:"12px 14px",display:"flex",gap:4,alignItems:"center"}}>
+              {[0,1,2].map(i=>(
+                <div key={i} style={{width:6,height:6,borderRadius:3,background:V.text3,
+                  animation:`typingDot 1.2s ${i*0.2}s infinite ease-in-out`}}/>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div ref={endRef}/>
+      </div>
+
+      {/* ── Quick replies ── */}
+      <div style={{display:"flex",gap:6,overflowX:"auto",padding:"6px 12px 4px",
+        WebkitOverflowScrolling:"touch",scrollbarWidth:"none",flexShrink:0}}>
+        {quickMsgs.map((msg,i)=>(
+          <button key={i} onClick={()=>{
+            // Send immediately like iMessage quick replies
+            const now=new Date().toISOString();
+            const qmsg={id:uid(),from:email,name:displayName,text:msg,ts:now,isOwn:true,read:false};
+            setMessages(prev=>{const u=[...prev,qmsg].slice(-150);LS.set(`ft-dm-${friend.email}`,u);lastMsgTsRef.current=now;return u;});
+            SocialAPI.sendDM(email,friend.email,msg,displayName);
+            SocialAPI.notifyDM(email,friend.email,displayName,msg,false);
+            Haptic.light();
+            scrollToBottom(true);
+          }} style={{padding:"5px 11px",borderRadius:14,flexShrink:0,
+            background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+            cursor:"pointer",fontSize:12,color:V.text3,fontFamily:V.font,whiteSpace:"nowrap"}}>
+            {msg}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Image preview ── */}
+      {imgPreview&&(
+        <div style={{padding:"0 12px 6px",flexShrink:0}}>
+          <div style={{position:"relative",display:"inline-block"}}>
+            <img src={imgPreview} alt="Preview" style={{maxHeight:90,maxWidth:160,borderRadius:10,display:"block",border:`2px solid ${V.accent}`}}/>
+            <button onClick={()=>setImgPreview(null)} style={{position:"absolute",top:-6,right:-6,
+              width:20,height:20,borderRadius:10,background:V.danger,border:`2px solid ${V.bg}`,
+              cursor:"pointer",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:V.font}}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Push notification prompt ── */}
+      {typeof Notification!=="undefined"&&Notification.permission==="default"&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",flexShrink:0,
+          borderTop:`1px solid ${V.cardBorder}`}}>
+          <span style={{fontSize:11,color:V.text2,flex:1}}>🔔 Enable notifications for message alerts</span>
+          <button onClick={async()=>{
+            const p=await Notification.requestPermission();
+            if(p==="granted"&&"serviceWorker" in navigator){
+              const reg=await navigator.serviceWorker.ready;
+              const vapidKey="BMZyIUQO08nuR7afvqNIWBK_ZOcr7PHwT2YwIxTa_ONwAD1YCaJ8Qkb4q4TTYSx_sTN-7-5vCzR8ApNZuyg-Ttc";
+              const keyBytes=Uint8Array.from(atob(vapidKey.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0));
+              const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes}).catch(()=>null);
+              if(sub){await fetch(`${SYNC_URL}/api/push`,{method:"POST",headers:SocialAPI._headers(email),body:JSON.stringify({action:"subscribe",email,subscription:sub.toJSON()})});SuccessToastCtrl.show("Notifications enabled 🔔");}
+            }
+          }} style={{padding:"5px 12px",borderRadius:12,background:V.accent,border:"none",cursor:"pointer",
+            fontSize:11,fontWeight:700,color:V.bg,flexShrink:0,fontFamily:V.font}}>Enable</button>
+        </div>
+      )}
+
+      {/* ── Input bar ── */}
+      <div style={{display:"flex",alignItems:"flex-end",gap:8,padding:"8px 12px 12px",
+        borderTop:`1px solid ${V.cardBorder}`,flexShrink:0,background:V.bg}}>
+        {/* Camera / attach */}
+        <input ref={imgRef} type="file" accept="image/*" onChange={handleImg} style={{display:"none"}}/>
+        <button onClick={()=>imgRef.current?.click()} style={{width:34,height:34,borderRadius:17,flexShrink:0,
+          background:"rgba(255,255,255,0.06)",border:`1px solid ${V.cardBorder}`,cursor:"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",marginBottom:2}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </button>
+
+        {/* Text input — pill style */}
+        <div style={{flex:1,position:"relative"}}>
+          <textarea value={input} ref={inputRef}
+            onChange={e=>{if(e.target.value.length<=1000)handleInput(e.target.value);}}
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+            placeholder="iMessage"
+            rows={1}
+            style={{width:"100%",padding:"9px 14px",background:"rgba(255,255,255,0.06)",
+              border:`1px solid ${V.cardBorder}`,borderRadius:20,color:V.text,
+              fontSize:15,outline:"none",fontFamily:V.font,boxSizing:"border-box",
+              resize:"none",maxHeight:100,overflowY:"auto",lineHeight:1.4,
+              WebkitOverflowScrolling:"touch",display:"block"}}/>
+          {input.length>800&&(
+            <span style={{position:"absolute",right:10,bottom:-14,fontSize:9,
+              color:input.length>950?V.danger:V.text3}}>{input.length}/1000</span>
+          )}
+        </div>
+
+        {/* Send / mic button */}
+        <button onClick={send} disabled={!input.trim()&&!imgPreview}
+          style={{width:34,height:34,borderRadius:17,flexShrink:0,marginBottom:2,
+            background:(input.trim()||imgPreview)?V.accent:"rgba(255,255,255,0.06)",
+            border:"none",cursor:(input.trim()||imgPreview)?"pointer":"default",
+            display:"flex",alignItems:"center",justifyContent:"center",transition:"background .15s"}}>
+          {(input.trim()||imgPreview)
+            ?<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={V.bg} strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            :<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+        </button>
+      </div>
+
+      {/* Bug 3: Friend info sheet — slides up when header avatar/name tapped */}
+      {friendInfo&&(
+        <div style={{position:"fixed",inset:0,zIndex:80,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}
+          onClick={()=>setFriendInfo(false)}>
+          <div style={{background:V.bg,border:`1px solid ${V.cardBorder}`,borderRadius:"20px 20px 0 0",
+            padding:"12px 20px 32px",maxHeight:"80vh",overflowY:"auto"}}
+            onClick={e=>e.stopPropagation()}>
+            {/* Handle bar */}
+            <div style={{width:36,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)",margin:"0 auto 16px"}}/>
+            {/* Avatar */}
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{width:80,height:80,borderRadius:40,overflow:"hidden",
+                background:friend.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
+                display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:8}}>
+                {friend.avatar
+                  ?<img src={friend.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+                  :<span style={{fontSize:32,color:"#fff",fontWeight:800}}>{(friend.name||"?")[0].toUpperCase()}</span>}
+              </div>
+              <div style={{fontSize:18,fontWeight:800,color:V.text}}>{friend.name||"Unknown"}</div>
+              {friend.username&&<div style={{fontSize:13,color:V.text3,marginTop:2}}>@{friend.username}</div>}
+              {friend.bio&&<div style={{fontSize:13,color:V.text2,marginTop:8,lineHeight:1.5,fontStyle:"italic"}}>{friend.bio}</div>}
+            </div>
+            {/* Quick actions */}
+            <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:20}}>
+              {[
+                {icon:"📞",label:"Call",action:()=>{}},
+                {icon:"📹",label:"Video",action:()=>{}},
+                {icon:"🔔",label:"Mute",action:()=>{}},
+                {icon:"🔍",label:"Search",action:()=>{}},
+              ].map(btn=>(
+                <button key={btn.label} onClick={btn.action} style={{display:"flex",flexDirection:"column",alignItems:"center",
+                  gap:4,background:"rgba(255,255,255,0.06)",border:"none",borderRadius:12,
+                  padding:"10px 16px",cursor:"pointer",minWidth:56}}>
+                  <span style={{fontSize:20}}>{btn.icon}</span>
+                  <span style={{fontSize:10,color:V.text3,fontWeight:600}}>{btn.label}</span>
+                </button>
+              ))}
+            </div>
+            {/* Info rows */}
+            <div style={{display:"flex",flexDirection:"column",gap:1,background:"rgba(255,255,255,0.03)",borderRadius:12,overflow:"hidden"}}>
+              {friend.challenges?.map((c,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"12px 16px",
+                  borderBottom:`1px solid ${V.cardBorder}`}}>
+                  <span style={{fontSize:13,color:V.text2,textTransform:"capitalize"}}>{c.challenge_id}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:V.accent,fontFamily:V.mono}}>{c.value}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setFriendInfo(false)} style={{width:"100%",marginTop:16,padding:"13px",
+              background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,borderRadius:12,
+              cursor:"pointer",fontSize:14,fontWeight:600,color:V.text3,fontFamily:V.font}}>Done</button>
+          </div>
+        </div>
+      )}
+
+      {/* CSS for typing animation */}
+      <style>{`@keyframes typingDot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}`}</style>
     </div>
   );
 }
@@ -11578,8 +12348,8 @@ function App(){
         setPushHealth({active:false,endpoint:null});
       }
       if(e.data?.type==="OPEN_DM"&&e.data.from){
-        d({type:"TAB",tab:"social_friends"});
-        // Store the sender so SocialFriends can auto-open their chat
+        d({type:"TAB",tab:"social_messages"});
+        // Store the sender so MessagesTab can auto-open their chat
         LS.set("ft-open-dm-from",e.data.from);
       }
     };
@@ -11605,7 +12375,7 @@ function App(){
       // Clean the URL without a reload
       const clean=window.location.pathname+(window.location.hash||"");
       window.history.replaceState({},"",clean);
-      d({type:"TAB",tab:"social_friends"});
+      d({type:"TAB",tab:"social_messages"});
     }
   },[]);
 
@@ -11631,7 +12401,10 @@ function App(){
           const key=`ft-unread-${dm.from}`;
           LS.set(key,(parseInt(LS.get(key))||0)+1);
           // Layer 3: Show banner if not currently in that chat
-          if(tabRef.current!==`social_friends`||!dm.from){
+          // Bug 9: also suppress banner when user is in the new MessagesTab viewing that chat
+          const inMessagesTab=tabRef.current==="social_messages";
+          const inFriendsTab=tabRef.current==="social_friends";
+          if(!inFriendsTab&&!inMessagesTab){
             MsgBannerCtrl.push({name:dm.name,text:dm.text,from:dm.from,type:"dm"});
           }
         }
@@ -11985,13 +12758,23 @@ function App(){
       if(perm==="granted"){
         LS.set("ft-reminders",true);
         SuccessToastCtrl.show("Notifications enabled");
-        // Trigger push subscription
-        if(navigator.serviceWorker?.controller){
-          navigator.serviceWorker.ready.then(reg=>{
-            reg.showNotification("IRONLOG",{
-              body:"You're all set — we'll send smart reminders for workouts, meals, and check-ins.",
-              icon:"./icon.svg",badge:"./icon.svg",tag:"welcome"
-            });
+        if("serviceWorker" in navigator&&"PushManager" in window){
+          navigator.serviceWorker.ready.then(async(reg)=>{
+            try{
+              const vk="BMZyIUQO08nuR7afvqNIWBK_ZOcr7PHwT2YwIxTa_ONwAD1YCaJ8Qkb4q4TTYSx_sTN-7-5vCzR8ApNZuyg-Ttc";
+              const keyBytes=Uint8Array.from(atob(vk.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0));
+              let sub=await reg.pushManager.getSubscription();
+              if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes});
+              const res=await fetch(`${SYNC_URL}/api/push`,{method:"POST",
+                headers:AuthToken.getHeaders(s.profile?.email||""),
+                body:JSON.stringify({action:"subscribe",email:s.profile?.email,subscription:sub.toJSON()})});
+              if(res.ok){LS.set("ft-push-subscribed",true);}
+              // Welcome notification
+              reg.showNotification("IRONLOG",{
+                body:"You're all set — we'll send smart reminders for workouts, meals, and check-ins.",
+                icon:"./icon.svg",badge:"./icon.svg",tag:"welcome"
+              });
+            }catch(e){console.warn("Push subscribe failed:",e.message||e);}
           });
         }
       }
@@ -12033,7 +12816,7 @@ function App(){
     {id:"track",icon:Icons.chart,label:"Track"},
     {id:"plan",icon:Icons.calendar,label:"Plan"},
     {id:"social",icon:Icons.target,label:"Social",badge:unreadMsgCount+socialNotifCount},
-    {id:"settings",icon:Icons.target,label:"Settings"},
+    {id:"settings",icon:Icons.sliders,label:"Settings"},
     ...(isAdmin?[{id:"admin",icon:Icons.zap,label:"Admin"}]:[]),
   ];
 
@@ -12325,6 +13108,7 @@ function App(){
         {/* Social tab + sub-pages */}
         {s.tab==="social"&&<SocialTab s={s} d={d}/>}
         {s.tab==="social_feed"&&<div><SubBack to="social" label="Social"/><SocialFeed s={s} d={d}/></div>}
+        {s.tab==="social_messages"&&<div><MessagesTab s={s} d={d}/></div>}
         {s.tab==="social_friends"&&<div><SubBack to="social" label="Social"/><SocialFriends s={s} d={d}/></div>}
         {s.tab==="social_groups"&&<div><SubBack to="social" label="Social"/><SocialGroups s={s} d={d}/></div>}
         {s.tab==="social_challenges"&&<div><SubBack to="social" label="Social"/><SocialChallenges s={s} d={d}/></div>}
@@ -12469,7 +13253,7 @@ function App(){
       <SuccessToast/>
       <GlobalConfirm/>
       <MessageBanner onTap={(msg)=>{
-        if(msg.type==="dm"){d({type:"TAB",tab:"social_friends"});}
+        if(msg.type==="dm"){d({type:"TAB",tab:"social_messages"});}
         else if(msg.type==="group"){d({type:"TAB",tab:"social_groups"});}
       }}/>
       {/* Interactive Guide Overlay */}
@@ -12642,72 +13426,6 @@ function App(){
             <div style={{display:"flex",gap:8,marginTop:16}}>
               <Btn full onClick={()=>{setShowInstallGuide(false);LS.set("ft-install-dismissed",true);}}>Got it</Btn>
             </div>
-          </div>
-        </div>
-      )}
-      {/* Push Notification Prompt — shows after tour ends */}
-      {showNotifPrompt&&(
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.8)",backdropFilter:"blur(8px)"}}/>
-          <div role="dialog" aria-modal="true" aria-label="Enable notifications" style={{position:"relative",
-            background:V.sheetBg,borderRadius:20,padding:28,maxWidth:340,width:"100%",
-            border:`1px solid ${V.accent}20`,textAlign:"center",maxHeight:"85vh",overflowY:"auto"}}>
-            <div style={{width:64,height:64,borderRadius:16,background:`linear-gradient(135deg,${V.accent}20,${V.accent2}20)`,
-              display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
-              <span style={{fontSize:32}}>🔔</span>
-            </div>
-            <div style={{fontSize:20,fontWeight:800,color:V.text,marginBottom:8}}>Stay on Track</div>
-            <div style={{fontSize:13,color:V.text3,lineHeight:1.6,marginBottom:8}}>
-              IRONLOG sends smart reminders based on your schedule — workout days, meal times, check-ins, and hydration.
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20,textAlign:"left",
-              padding:"12px 16px",background:"rgba(255,255,255,0.02)",borderRadius:12,border:`1px solid ${V.cardBorder}`}}>
-              {[
-                {icon:"💪",text:"Workout reminders on training days"},
-                {icon:"🥗",text:"Breakfast, lunch & dinner logging nudges"},
-                {icon:"💧",text:"Hydration check-ins through the day"},
-                {icon:"📊",text:"Daily readiness check-in prompts"},
-                {icon:"🤫",text:"Quiet hours 10pm–7am — we respect your sleep"},
-              ].map((item,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
-                  <span style={{fontSize:14}}>{item.icon}</span>
-                  <span style={{fontSize:11,color:V.text2}}>{item.text}</span>
-                </div>
-              ))}
-            </div>
-            <button onClick={async()=>{
-              LS.set("ft-notif-prompted",true);
-              if("Notification" in window){
-                const perm=await Notification.requestPermission();
-                if(perm==="granted"){
-                  LS.set("ft-reminders",true);
-                  SuccessToastCtrl.show("Notifications enabled");
-                  if(navigator.serviceWorker?.controller){
-                    navigator.serviceWorker.ready.then(async(reg)=>{
-                      try{
-                        const vk="BMZyIUQO08nuR7afvqNIWBK_ZOcr7PHwT2YwIxTa_ONwAD1YCaJ8Qkb4q4TTYSx_sTN-7-5vCzR8ApNZuyg-Ttc";
-                        const sub=await reg.pushManager.subscribe({userVisibleOnly:true,
-                          applicationServerKey:Uint8Array.from(atob(vk),c=>c.charCodeAt(0))});
-                        await fetch(`${SYNC_URL}/api/push`,{method:"POST",
-                          headers:AuthToken.getHeaders(s.profile?.email||""),
-                          body:JSON.stringify({action:"subscribe",email:s.profile?.email,subscription:sub.toJSON()})});
-                        LS.set("ft-push-subscribed",true);
-                      }catch(e){console.warn("Error:",e);}
-                    });
-                  }
-                }
-              }
-              setShowNotifPrompt(false);
-            }} style={{width:"100%",padding:"14px",borderRadius:12,background:V.accent,border:"none",
-              cursor:"pointer",fontSize:15,fontWeight:700,color:V.bg,fontFamily:V.font,marginBottom:8}}>
-              Enable Smart Notifications
-            </button>
-            <button onClick={()=>{LS.set("ft-notif-prompted",true);setShowNotifPrompt(false);}}
-              style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",
-                border:`1px solid ${V.cardBorder}`,cursor:"pointer",fontSize:12,color:V.text3,fontFamily:V.font}}>
-              Maybe Later
-            </button>
-            <div style={{fontSize:9,color:V.text3,marginTop:10,opacity:0.5}}>You can change this anytime in Settings</div>
           </div>
         </div>
       )}
