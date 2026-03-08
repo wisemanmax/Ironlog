@@ -1,347 +1,237 @@
-# IRONLOG — v11
+# IRONLOG API — v11.0.0
 
-**Live:** [ironlog.space](https://ironlog.space)  
-**Stack:** React (UMD, no build step) · Vercel Serverless · Supabase · Cloudflare R2  
-**Architecture:** Single `index.html` frontend + `ironlog-api` repo for all backend logic
+Serverless backend for the IRONLOG fitness PWA. Vercel serverless functions backed by Supabase Postgres, Cloudflare R2 media storage, and Resend transactional email.
 
 ---
 
-## What It Is
+## Stack
 
-IRONLOG is a full-featured fitness PWA. Workout tracking, nutrition logging, body metrics, progress photos, a social layer with DMs and challenges, push notifications, gamification (XP, ranks, missions, streaks), and a full admin panel — all in a single HTML file on the frontend.
-
----
-
-## Tech Stack
-
-| Layer | Tech |
-|---|---|
-| Frontend | React 18 UMD, Recharts, inline styles only |
-| Backend | Vercel serverless functions (`.mjs`) |
-| Database | Supabase (Postgres) |
-| Storage | Cloudflare R2 (progress photos/video) |
-| Auth | Email + 6-digit PIN, JWT-style session tokens |
-| Push | Web Push API + VAPID |
-| PWA | Service Worker, Web App Manifest |
-
----
-
-## File Structure
-
-```
-ironlog-repo/
-├── index.html          ← Entire frontend (19,640+ lines)
-├── sw.js               ← Service worker (offline + push)
-├── manifest.json       ← PWA manifest
-└── icon.svg
-
-ironlog-api/
-├── api/
-│   ├── users/
-│   │   └── index.mjs   ← Registration + profile fetch  ← UPDATED v11
-│   ├── sync/
-│   │   └── index.mjs   ← Cloud backup/restore
-│   ├── auth/
-│   │   ├── session.mjs ← PIN auth, email verify, reset
-│   │   └── validate.mjs← JWT validation middleware
-│   ├── social/
-│   │   └── index.mjs   ← Friends, feed, DMs, duels, wars
-│   ├── push/
-│   │   └── index.mjs   ← Web push subscribe + broadcast
-│   ├── photos/
-│   │   └── upload.mjs  ← R2 signed URL generation
-│   └── admin/
-│       └── index.mjs   ← Platform dashboard, user mgmt, analytics
-└── package.json
-```
-
----
-
-## v11 Changes — What's New
-
-### Onboarding: 3 new data points collected + stored in Supabase
-
-| Field | Onboarding Step | DB Column |
+| Layer | Service | Plan |
 |---|---|---|
-| Primary Goal | New Step 4 (Build Muscle / Lose Fat / Recomp / Strength / Maintain) | `users.primary_goal` |
-| City | Profile step | `users.city` |
-| Zip Code | Profile step | `users.zip_code` |
-
-### Onboarding flow restructured (7 steps total)
-
-| Step | Screen |
-|---|---|
-| 1 | Welcome |
-| 2 | Units (lbs/kg) |
-| 3 | Training Split |
-| **4** | **Primary Goal ← NEW** |
-| 5 | Nutrition Targets |
-| 6 | Profile (now includes City + Zip) |
-| 7 | PIN |
-
-### Progress indicator upgraded
-- Replaced dot row with `Step X of Y` label + smooth green gradient progress bar
-
-### API updated
-- `POST /api/users` now persists `city`, `zip_code`, `primary_goal` to the `users` table
-- GET route unchanged
+| Runtime | Vercel Hobby | Free (100K invocations/mo) |
+| Database | Supabase | Free (500MB, 50K MAUs) |
+| Media storage | Cloudflare R2 | Free (10GB, free egress) |
+| Email | Resend | Free (3,000/mo) |
 
 ---
 
-## Deploying v11
+## Endpoints
 
-**Step 1 — Run the migration in Supabase SQL Editor:**
-
-```sql
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS city         TEXT,
-  ADD COLUMN IF NOT EXISTS zip_code     TEXT,
-  ADD COLUMN IF NOT EXISTS primary_goal TEXT;
 ```
-
-(Full migration file: `migration-onboarding-v11.sql`)
-
-**Step 2 — Deploy updated API:**
-Replace `ironlog-api/api/users/index.mjs` with the new file and push to Vercel.
-
-**Step 3 — Deploy updated frontend:**
-Replace `ironlog-repo/index.html` and push to GitHub Pages.
-
-**Order matters:** run the migration before deploying the API, or the insert will fail for new registrations.
-
----
-
-## Users Table Schema (v11)
-
-```sql
-users (
-  email               TEXT PRIMARY KEY,
-  first_name          TEXT,
-  last_name           TEXT,
-  nickname            TEXT,
-  date_of_birth       TEXT,
-  sex                 TEXT,
-
-  -- Location
-  state               TEXT,
-  city                TEXT,          -- NEW v11
-  zip_code            TEXT,          -- NEW v11
-
-  -- Physical
-  height              TEXT,
-  current_weight      NUMERIC,
-  target_weight       NUMERIC,
-
-  -- Training profile
-  fitness_level       TEXT,
-  activity_level      TEXT,
-  weekly_availability TEXT,
-  primary_goal        TEXT,          -- NEW v11
-  split               TEXT,
-  units               TEXT,
-
-  -- Account
-  account_pin         TEXT,          -- bcrypt hash
-  pin_attempts        INT,
-  friend_code         TEXT UNIQUE,
-  username            TEXT,
-  bio                 TEXT,
-  badges              JSONB,
-  is_admin            BOOLEAN,
-  is_banned           BOOLEAN,
-
-  -- Consent & audit
-  consented_at        TIMESTAMPTZ,
-  consent_version     TEXT,
-  created_at          TIMESTAMPTZ,
-  updated_at          TIMESTAMPTZ,
-  last_ip_address     TEXT
-)
+api/auth/session.mjs      — create · validate · revoke · email verify · PIN reset
+api/auth/validate.mjs     — shared session middleware (not a function)
+api/sync/push.js          — push all user data to server
+api/sync/pull.js          — pull all user data (PIN or session auth)
+api/sync/reconcile.js     — record count reconciliation check
+api/users/index.mjs       — user registration · public profile lookup
+api/push/index.mjs        — Web Push subscription · push notifications
+api/photos/upload.mjs     — R2 photo/video upload · signed URL generation
+api/social/index.mjs      — friends · feed · groups · DMs · notifications
+api/admin/index.mjs       — dashboard · user management · moderation · XP tools
 ```
 
 ---
 
-## All Supabase Tables
+## Environment Variables
 
-| Table | Purpose |
-|---|---|
-| `users` | Identity, profile, location, training preferences |
-| `user_settings` | Goals, schedule, gamification, device ID |
-| `workouts` | All workout sessions |
-| `nutrition` | Daily nutrition logs |
-| `body_measurements` | Weight, BF%, measurements |
-| `progress_photos` | Metadata; actual files in R2 |
-| `checkins` | Daily readiness check-ins |
-| `friendships` | Friend relationships |
-| `activity_events` | Feed events, DMs, notifications |
-| `push_subscriptions` | Web push endpoints |
-| `sync_log` | Sync timestamps per device |
+Set in **Vercel → Project → Settings → Environment Variables**:
 
----
+| Variable | Required | Description |
+|---|---|---|
+| `SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | ✅ | Supabase service role key (bypasses RLS) |
+| `VAPID_PUBLIC_KEY` | ✅ | Web Push VAPID public key |
+| `VAPID_PRIVATE_KEY` | ✅ | Web Push VAPID private key |
+| `VAPID_EMAIL` | ✅ | Contact email for VAPID (`mailto:you@domain.com`) |
+| `ADMIN_EMAIL` | ✅ | Super-admin email |
+| `RESEND_API_KEY` | ✅ | Resend API key for transactional email |
+| `CLOUDFLARE_ACCOUNT_ID` | ⬜ | R2 account ID |
+| `R2_ACCESS_KEY_ID` | ⬜ | R2 S3-compatible access key |
+| `R2_SECRET_ACCESS_KEY` | ⬜ | R2 S3-compatible secret |
+| `R2_BUCKET_NAME` | ⬜ | R2 bucket name |
+| `R2_PUBLIC_URL` | ⬜ | R2 public URL |
+| `LATEST_APP_VERSION` | ⬜ | Current version string — triggers update banner |
+| `UPDATE_NOTES` | ⬜ | Message shown with update banner |
+| `SENTRY_DSN` | ⬜ | Sentry DSN for error tracking |
 
-## Environment Variables (Vercel)
-
-```
-SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
-ADMIN_SECRET=
-VAPID_PUB=
-VAPID_PRIV=
-VAPID_MAILTO=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY=
-R2_SECRET_KEY=
-R2_BUCKET=
-R2_PUBLIC_URL=
-```
+> **Generate VAPID keys:** `npx web-push generate-vapid-keys`
 
 ---
 
-## API Reference
+## Deploy
 
-### `POST /api/users` — Register new user
-
-```json
-{
-  "firstName": "John",
-  "lastName": "Smith",
-  "email": "john@example.com",
-  "dob": "1995-04-12",
-  "sex": "Male",
-  "state": "Texas",
-  "city": "Austin",
-  "zipCode": "78701",
-  "primaryGoal": "Build Muscle",
-  "split": "PPL",
-  "units": "lbs",
-  "fitnessLevel": "Intermediate",
-  "activityLevel": "Moderately active",
-  "weeklyAvailability": "4 days",
-  "height": "5'11\"",
-  "currentWeight": 185,
-  "targetWeight": 195,
-  "goals": { "cal": 2800, "protein": 200, "carbs": 280, "fat": 80 },
-  "accountPin": "123456",
-  "consentedAt": "2026-03-08T00:00:00Z",
-  "consentVersion": "1.0",
-  "deviceId": "abc123"
-}
+```bash
+npm install
+vercel --prod
 ```
 
-Response: `{ "success": true, "email": "john@example.com", "friend_code": "XK7PQ2" }`
-
-### `GET /api/users?email=...` — Public profile lookup
-Returns public fields: name, bio, badges, friend_code, fitness_level, units.
-
-### `POST /api/sync` — Cloud backup/restore
-Full workout, nutrition, body, and settings sync.
-
-### `POST /api/auth/session` — Auth
-Actions: `send_verify_code` · `confirm_verify_code` · `send_reset_code` · `verify_reset_code` · `set_new_pin`
-
-### `POST /api/social` — Social layer
-Friends, feed, DMs, duels, clan wars.
-
-### `POST /api/push` — Web Push
-`subscribe` · `count` · `send` (admin only)
-
-### `POST /api/admin` — Admin panel (admin only)
-`dashboard` · `users` · `user_detail` · `ban_user` · `delete_user` · `set_admin` · `adjust_xp` · `set_rank` · `business_analytics` · `set_notif_flags`
+Push to a GitHub repo connected to Vercel for automatic deploys on every commit.
 
 ---
 
 ## Auth Flow
 
-1. Onboarding complete → `POST /api/users` → account created + friend code assigned
-2. Email verification code auto-sent
-3. User enters 6-digit code → verified
-4. Subsequent logins: email → PIN → full sync restored
-5. Forgot PIN: email reset code → verify → set new PIN
+### Sign-up
+1. `POST /api/users` — creates account, assigns friend code, sends 6-digit verify code via email
+2. `POST /api/auth/session` `action=confirm_verify_code` — marks account verified
 
-Tokens are stored in `localStorage`, validated on every API call via `validate.mjs`.
+### Sign-in
+1. `POST /api/sync/pull` with `email` + `pin` — returns all user data, issues session token
+2. All subsequent requests use `X-Session-Token` header
+
+### PIN Reset
+1. `POST /api/auth/session` `action=send_reset_code`
+2. `POST /api/auth/session` `action=verify_reset_code` → short-lived reset token
+3. `POST /api/auth/session` `action=set_new_pin` → hashes new PIN, revokes all sessions
 
 ---
 
-## Gamification
+## User Registration — `POST /api/users`
 
-| Element | Detail |
+Called once at the end of onboarding. Creates the user row and initial settings.
+
+**Fields accepted:**
+
+| Field | Description |
 |---|---|
-| XP | Earned on workouts, nutrition, check-ins, missions, milestones |
-| Levels | 1–50 with rank names (Iron → Bronze → Silver → Gold → Platinum → Diamond → Legend) |
-| Streaks | Daily workout streaks + Streak Shield protection |
-| Missions | 3 daily from a pool of 28 |
-| Milestones | PR weights, workout counts, streak lengths — each fires once with +50 XP |
-| Consistency XP | +10 XP per exercise trained 3+ times in last 14 days |
-| Duels | 1v1 XP challenges |
-| Clan Wars | Team vs team competitions |
+| `firstName`, `lastName`, `email` | Required |
+| `accountPin` | Required — 6-digit PIN, stored as bcrypt hash |
+| `dob`, `sex`, `nickname` | Optional identity |
+| `state`, `city`, `zipCode` | Location — all three stored |
+| `primaryGoal` | Build Muscle / Lose Fat / Body Recomposition / Strength / Maintain Fitness |
+| `split` | PPL / Bro / Upper-Lower / Full Body / Custom |
+| `units` | `lbs` or `kg` |
+| `fitnessLevel`, `activityLevel`, `weeklyAvailability` | Training profile |
+| `height`, `currentWeight`, `targetWeight` | Physical stats |
+| `goals` | `{ cal, protein, carbs, fat }` — nutrition targets |
+| `consentedAt`, `consentVersion` | Consent record |
+| `deviceId` | Device identifier |
+
+**Response:** `{ success: true, email, friend_code }`
 
 ---
 
-## Engagement Features (v10+)
+## Sync Protocol
 
-All frontend-only, `localStorage`-backed:
+### Push — `POST /api/sync/push`
+Upserts all user data. Response includes `latest_version` — triggers update banner if different from client's `APP_VERSION`.
 
-- Morning briefing card with daily tip + XP multiplier
-- Comeback card after 2–21 days off
-- Best week ever banner
-- Weekly recap (workouts vs goal, volume delta, weekly XP)
-- Friend nudge when friends trained but you haven't
-- Session duration drop alert (–20% avg)
-- Nutrition pattern heat strip (28-day DOW)
-- Sleep vs performance correlation chart
-- Body weight trend prediction (linear regression, 30/60-day projection)
-- Milestone pop-ups with +50 XP
-- Per-exercise consistency XP
-- Enhanced rank-up celebration (40 particles, 2-phase)
-- Duel winner announcement with claim/share
-- Activity feed auto-refresh (60s polling)
+**Data synced:** workouts · nutrition · body measurements · photos · check-ins · milestones · settings (goals, schedule, units, gamification, phases, injuries, privacy, supplements)
+
+### Pull — `POST /api/sync/pull`
+Returns everything. Auth: session token header (normal use) or PIN in body (sign-in only).
+
+**Profile fields returned:** firstName · lastName · nickname · email · dob · sex · state · city · zipCode · height · fitnessLevel · activityLevel · weeklyAvailability · currentWeight · primaryGoal · split · units · avatar · banner · bio · username · friendCode · badges
+
+### Reconcile — `POST /api/sync/reconcile`
+Returns DB record counts per table. Client compares to local counts in Settings → System Health.
 
 ---
 
-## localStorage Keys Reference
+## Social API — `POST /api/social`
 
-| Key | Purpose |
+| Route | Method | Description |
+|---|---|---|
+| `profile` | GET | Public profile by username |
+| `friends` | GET / POST | Friends list · send / accept / remove / block |
+| `feed` | GET / POST | Activity feed · log event · react |
+| `groups` | GET / POST | Groups · create / join / leave / members |
+| `notifications` | GET / POST | Unread notifications · mark read / delete / clear |
+| `update_profile` | POST | Update avatar · banner · bio |
+| `set_username` | POST | Claim username |
+| `dms` | GET | Full DM thread |
+| `check_messages` | GET | Lightweight DM + group unread poll |
+| `group_events` | GET | Group chat messages |
+| `snapshot` | POST | Challenge/badge snapshot |
+
+---
+
+## Admin API — `POST /api/admin`
+
+Admin-only. Requires `is_admin = true` on the user's account.
+
+| Action | Super-admin | Description |
+|---|---|---|
+| `check` | | Verify admin status |
+| `dashboard` | | KPIs + 14-day activity chart (60s cache) |
+| `users` | | Enriched user list with last sync, workout count |
+| `user_detail` | | Full user drill-down — profile, workouts, photos, DMs, friends |
+| `business_analytics` | | Retention, frequency distribution, level breakdown, state + city distribution, 90-day growth chart |
+| `adjust_xp` | | Adjust a user's bonus XP |
+| `get_gamification` | | Read a user's gamification state |
+| `set_notif_flags` | | Queue an in-app notification for a user |
+| `get_notif_flags` | | Fetch pending flags (polled by client on app open) |
+| `clear_notif_flags` | | Clear flags after client consumes them |
+| `ban_user` | | Ban / unban + revoke sessions |
+| `view_dms` | | View DM thread between two users |
+| `view_group_chat` | | View a group's chat history |
+| `health` | | Stale users + sync issues report |
+| `delete_user` | ✅ | Cascade-delete all user data |
+| `set_admin` | ✅ | Grant / revoke admin flag |
+
+---
+
+## Gamification Sync
+
+Gamification state lives in a JSONB column on `user_settings` and travels with every push/pull.
+
+| Key | Type | Description |
+|---|---|---|
+| `xp_bonus` | `{ total, log[] }` | Bonus XP from missions, wars, multipliers |
+| `missions_completed` | `{ [date]: { [id]: true } }` | Daily mission history |
+| `streak_shields` | number | Shield count (max 3) |
+| `last_known_level` | number | Level-up detection on new devices |
+| `badge_dates` | `{ [badge_id]: date }` | Earn dates for all badges |
+| `duels` | array | Active + past 1v1 duels |
+| `rivals` | array | Rivals list |
+| `war_wins` | number | Total weekly war wins |
+| `war_streak` | number | Consecutive war win streak |
+| `comeback_used` | string \| null | Date comeback bonus last used |
+
+**Merge strategy on pull:** XP takes max · missions merge by day · shields take max · badge dates take earliest · duels/rivals/wars: server wins if local is empty.
+
+---
+
+## Security
+
+| Concern | Implementation |
 |---|---|
-| `ft-theme` | `dark` / `light` |
-| `ft-account-pin` | Local PIN cache |
-| `ft-device-id` | Unique device ID |
-| `ft-email-verified` | `true` / `skipped` |
-| `ft-streak-shields` | Shield count |
-| `ft-missions-completed` | `{ [date]: [missionIds] }` |
-| `ft-feed-cache` | `{ events, ts }` |
-| `ft-comeback-dismissed` | Per-gap dismiss |
-| `ft-weekly-recap-dismissed` | Daily dismiss |
-| `ft-best-week-dismissed` | Daily dismiss |
-| `ft-dur-alert-dismissed` | Daily dismiss |
-| `ft-milestones-fired` | `{ [milestoneId]: true }` |
-| `ft-cons-{exerciseId}` | Consistency XP dedup |
-| `ft-admin-push-history` | Last 20 push broadcasts |
+| PIN storage | bcrypt hash (10 rounds) |
+| PIN lockout | 5 attempts → 15-min lockout |
+| Session tokens | 30-day, device-scoped |
+| Admin check | DB flag + session + env super-admin |
+| CORS | `ironlog.space` and `localhost` only |
+| DM friendship | Verified server-side before insert |
+| Event types | Allowlist enforced |
+| `vault_pin` | Scrubbed before upsert — never stored server-side |
+| Stack traces | Excluded from all 5xx responses |
+| Admin projections | Exclude PIN hash, IP, lockout fields |
+| RLS | Enabled on all user data tables |
 
 ---
 
-## Pending Items
+## Rate Limits
 
-- Wire `m_early_bird` mission: `LS.set("ft-workout-early-"+today(), true)` in WorkoutTab when `new Date().getHours() < 8`
-- Wire `m_dm` mission: `LS.set("ft-dm-sent-today", today())` in IMConversation send path
-- Business analytics `topExercises` returns `[]` — query deferred
-- Test push broadcast on real device post-deploy
+| Endpoint | Limit | Window |
+|---|---|---|
+| Social API (per IP) | 100 req | 60s |
+| DM push notify | 1 req | Per 60s per user |
+| PIN verify | 5 attempts | 15-min lockout |
+| Email code resend | 1 req | Per 60s |
+| Email verify | 5 attempts | Per code |
 
 ---
 
 ## Version History
 
-| Version | Summary |
+| Version | Changes |
 |---|---|
-| v1–v3 | Core workout tracking, local storage only |
-| v4 | Cloud sync, Supabase integration |
-| v5 | Social layer, DMs, push notifications, progress photos |
-| v6 | UI/UX overhaul, admin panel |
-| v7 | Gamification (XP, levels, streaks, missions) |
-| v8 | Duels, clan wars, leaderboards |
-| v9 | AI coach, body metrics overhaul, readiness check-ins |
-| v10 | 19 engagement features, enhanced celebrations, admin push multi-select |
-| **v11** | Onboarding: primary goal step, city + zip fields, progress bar; API + DB updated |
-
----
-
-*Built by Byheir Wise — [ironlog.space](https://ironlog.space)*
+| v5.0.0 | Initial structured API |
+| v5.1.0 | PIN hashing, admin delete/ban, allowlists |
+| v6.0.0 | Reconcile endpoint, sync_log, retry wrapper |
+| v7.0.0 | R2 photo/video storage, signed URLs |
+| v8.0.0 | Email verify + PIN reset, polling optimization |
+| v8.1.0 | Consolidation to 9 functions |
+| v9.0.0 | Gamification sync · admin notif flags · extended body measurements · RLS on all tables |
+| v10.0.0 | Admin push multi-select · in-app notification queuing · business analytics · validate.mjs fix |
+| **v11.0.0** | **Registration now captures `city`, `zipCode`, `primaryGoal` · Pull returns new fields · Business analytics includes city/zip/goal breakdowns** |
