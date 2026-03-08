@@ -3961,6 +3961,9 @@ function NutritionTab({s,d}){
   const week=s.nutrition.filter(n=>n.date>=ago(7));
   const avgCal=week.length?Math.round(week.reduce((s,n)=>s+n.cal,0)/week.length):0;
   const avgP=week.length?Math.round(week.reduce((s,n)=>s+n.protein,0)/week.length):0;
+  const protGoalVal=s.goals?.protein||0;
+  const protHitDays=protGoalVal>0?week.filter(n=>n.protein>=protGoalVal*0.9).length:0;
+  const protHitRate=week.length&&protGoalVal>0?Math.round(protHitDays/week.length*100):0;
   const todayNutr=s.nutrition.find(n=>n.date===td);
   const MacroRing=({value,goal,color,label})=>{
     const pct=goal>0?Math.min(1,value/goal):0;
@@ -4321,19 +4324,24 @@ function NutritionTab({s,d}){
 // ═══════════════════════════════════════
 function BodyTab({s,d}){
   const [show,setShow]=useState(false);
-  const [form,setForm]=useState({date:today(),weight:"",bf:"",chest:"",waist:"",arms:"",thighs:""});
+  const emptyForm={date:today(),weight:"",bf:"",waist:"",hips:"",chest:"",neck:"",arms:"",thighs:"",calves:""};
+  const [form,setForm]=useState(emptyForm);
+  const [showMeasurements,setShowMeasurements]=useState(false);
 
   const save=()=>{
-    d({type:"ADD_B",b:{id:uid(),date:form.date,weight:parseFloat(form.weight)||0,bf:parseFloat(form.bf)||0,
-      chest:parseFloat(form.chest)||0,waist:parseFloat(form.waist)||0,arms:parseFloat(form.arms)||0,thighs:parseFloat(form.thighs)||0}});
-    Haptic.medium();SuccessToastCtrl.show("Measurement saved");
+    d({type:"ADD_B",b:{id:uid(),date:form.date,
+      weight:parseFloat(form.weight)||0,bf:parseFloat(form.bf)||0,
+      waist:parseFloat(form.waist)||0,hips:parseFloat(form.hips)||0,
+      chest:parseFloat(form.chest)||0,neck:parseFloat(form.neck)||0,
+      arms:parseFloat(form.arms)||0,thighs:parseFloat(form.thighs)||0,
+      calves:parseFloat(form.calves)||0}});
+    Haptic.medium();SuccessToastCtrl.show("Logged ✓");
     setShow(false);
-    // #20: Prompt to take progress photo (weekly)
     const lastPhotoDate=s.photos[0]?.date;
     const daysSincePhoto=lastPhotoDate?Math.round((Date.now()-new Date(lastPhotoDate+"T12:00:00"))/86400000):99;
     if(daysSincePhoto>=7){
       setTimeout(()=>{
-        ConfirmCtrl.show("Take a progress photo?",`It's been ${daysSincePhoto} days since your last one. Pair it with today's measurements.`,
+        ConfirmCtrl.show("Take a progress photo?",`It's been ${daysSincePhoto} days since your last one.`,
           ()=>d({type:"TAB",tab:"track_photos"}));
       },500);
     }
@@ -4350,14 +4358,17 @@ function BodyTab({s,d}){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",gap:8}}>
-        <Btn full onClick={()=>{setForm({date:today(),weight:"",bf:"",chest:"",waist:"",arms:"",thighs:""});setShow(true);}}>
-          {Icons.plus({size:16,color:V.bg})} Log Measurement
+        <Btn full onClick={()=>{setForm({...emptyForm,date:today()});setShowMeasurements(false);setShow(true);}}>
+          {Icons.plus({size:16,color:V.bg})} Log Today
         </Btn>
         {s.body.find(b=>b.date===ago(1))&&(
           <Btn v="secondary" onClick={()=>{
             const yd=s.body.find(b=>b.date===ago(1));
             if(yd){setForm({date:today(),weight:yd.weight?.toString()||"",bf:yd.bf?.toString()||"",
-              chest:yd.chest?.toString()||"",waist:yd.waist?.toString()||"",arms:yd.arms?.toString()||"",thighs:yd.thighs?.toString()||""});setShow(true);}
+              waist:yd.waist?.toString()||"",hips:yd.hips?.toString()||"",
+              chest:yd.chest?.toString()||"",neck:yd.neck?.toString()||"",
+              arms:yd.arms?.toString()||"",thighs:yd.thighs?.toString()||"",
+              calves:yd.calves?.toString()||""});setShowMeasurements(false);setShow(true);}
           }} s={{flexShrink:0,fontSize:11}}>{Icons.copy({size:14,color:V.text2})} Yesterday</Btn>
         )}
       </div>
@@ -4440,10 +4451,12 @@ function BodyTab({s,d}){
         const changes=[
           {l:"Weight",v1:parseFloat(first.weight)||0,v2:parseFloat(last.weight)||0,u:wUnit(s.units),c:V.purple},
           {l:"Body Fat",v1:parseFloat(first.bf)||0,v2:parseFloat(last.bf)||0,u:"%",c:V.danger},
-          {l:"Chest",v1:parseFloat(first.chest)||0,v2:parseFloat(last.chest)||0,u:s.units==="kg"?"cm":"in",c:V.accent},
           {l:"Waist",v1:parseFloat(first.waist)||0,v2:parseFloat(last.waist)||0,u:s.units==="kg"?"cm":"in",c:V.accent2},
+          {l:"Hips",v1:parseFloat(first.hips)||0,v2:parseFloat(last.hips)||0,u:s.units==="kg"?"cm":"in",c:"#ec4899"},
+          {l:"Chest",v1:parseFloat(first.chest)||0,v2:parseFloat(last.chest)||0,u:s.units==="kg"?"cm":"in",c:V.accent},
           {l:"Arms",v1:parseFloat(first.arms)||0,v2:parseFloat(last.arms)||0,u:s.units==="kg"?"cm":"in",c:V.warn},
-          {l:"Thighs",v1:parseFloat(first.thighs)||0,v2:parseFloat(last.thighs)||0,u:s.units==="kg"?"cm":"in",c:"#ec4899"},
+          {l:"Thighs",v1:parseFloat(first.thighs)||0,v2:parseFloat(last.thighs)||0,u:s.units==="kg"?"cm":"in",c:V.purple},
+          {l:"Calves",v1:parseFloat(first.calves)||0,v2:parseFloat(last.calves)||0,u:s.units==="kg"?"cm":"in",c:"#22c55e"},
         ].filter(c2=>c2.v1>0&&c2.v2>0);
         if(changes.length===0)return null;
         const days=Math.round((new Date(last.date)-new Date(first.date))/86400000);
@@ -4468,33 +4481,63 @@ function BodyTab({s,d}){
         );
       })()}
 
-      {latest&&(
-        <Card>
-          <span style={{fontSize:11,color:V.text3,fontWeight:700,display:"block",marginBottom:12,textTransform:"uppercase",letterSpacing:".06em"}}>Measurements</span>
-          {[{l:"Chest",v:latest.chest},{l:"Waist",v:latest.waist},{l:"Arms",v:latest.arms},{l:"Thighs",v:latest.thighs}].map(m=>(
-            <div key={m.l} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-              <span style={{width:54,fontSize:12,color:V.text2}}>{m.l}</span>
-              <div style={{flex:1,height:22,background:"rgba(255,255,255,0.03)",borderRadius:6,overflow:"hidden"}}>
-                <div style={{width:`${Math.min(100,(m.v/(s.units==="kg"?100:42))*100)}%`,height:"100%",background:`linear-gradient(90deg,${V.accent}30,${V.accent2}30)`,borderRadius:6}}/>
-              </div>
-              <span style={{fontSize:14,color:V.text,fontFamily:V.mono,minWidth:44,textAlign:"right"}}>{((parseFloat(m.v)||0).toFixed(1))}"</span>
+      {latest&&(()=>{
+        const unit=s.units==="kg"?"cm":"in";
+        const meas=[
+          {l:"Waist",v:latest.waist,c:V.accent2},
+          {l:"Hips",v:latest.hips,c:"#ec4899"},
+          {l:"Chest",v:latest.chest,c:V.accent},
+          {l:"Arms",v:latest.arms,c:V.warn},
+          {l:"Thighs",v:latest.thighs,c:V.purple},
+          {l:"Calves",v:latest.calves,c:"#22c55e"},
+          {l:"Neck",v:latest.neck,c:V.text3},
+        ].filter(m=>parseFloat(m.v)>0);
+        if(meas.length===0)return null;
+        return(
+          <Card style={{padding:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Measurements</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {meas.map(m=>(
+                <div key={m.l} style={{padding:"10px 12px",borderRadius:10,background:"rgba(255,255,255,0.02)",border:`1px solid ${m.c}20`}}>
+                  <div style={{fontSize:9,color:V.text3,fontWeight:700,marginBottom:3,textTransform:"uppercase",letterSpacing:".06em"}}>{m.l}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:m.c,fontFamily:V.mono,lineHeight:1}}>{(parseFloat(m.v)||0).toFixed(1)}<span style={{fontSize:10,fontWeight:400,color:V.text3}}> {unit}</span></div>
+                </div>
+              ))}
             </div>
-          ))}
-        </Card>
-      )}
+          </Card>
+        );
+      })()}
 
       {show&&(
-        <Sheet title="Log Measurement" onClose={()=>setShow(false)}
-          footer={<Btn full onClick={save}>{Icons.check({size:16,color:V.bg})} Save Measurement</Btn>}>
+        <Sheet title="Log Body" onClose={()=>setShow(false)}
+          footer={<Btn full onClick={save}>{Icons.check({size:16,color:V.bg})} Save</Btn>}>
           <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Field label="Weight" type="number" value={form.weight} onChange={v=>setForm(f=>({...f,weight:v}))} unit={wUnit(s.units)} step="0.1"/>
-            <Field label="Body Fat" type="number" value={form.bf} onChange={v=>setForm(f=>({...f,bf:v}))} unit="%" step="0.1"/>
-            <Field label="Chest" type="number" value={form.chest} onChange={v=>setForm(f=>({...f,chest:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
-            <Field label="Waist" type="number" value={form.waist} onChange={v=>setForm(f=>({...f,waist:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
-            <Field label="Arms" type="number" value={form.arms} onChange={v=>setForm(f=>({...f,arms:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
-            <Field label="Thighs" type="number" value={form.thighs} onChange={v=>setForm(f=>({...f,thighs:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Essential</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Field label="Weight" type="number" value={form.weight} onChange={v=>setForm(f=>({...f,weight:v}))} unit={wUnit(s.units)} step="0.1"/>
+              <Field label="Body Fat %" type="number" value={form.bf} onChange={v=>setForm(f=>({...f,bf:v}))} unit="%" step="0.1"/>
+            </div>
           </div>
+          <button onClick={()=>setShowMeasurements(v=>!v)}
+            style={{width:"100%",padding:"10px 14px",borderRadius:10,background:"rgba(255,255,255,0.03)",
+              border:`1px dashed ${showMeasurements?V.accent+"40":"rgba(255,255,255,0.1)"}`,
+              cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",
+              fontFamily:V.font,marginBottom:showMeasurements?10:0}}>
+            <span style={{fontSize:12,fontWeight:600,color:showMeasurements?V.accent:V.text3}}>📏 Measurements <span style={{fontSize:10,fontWeight:400,color:V.text3}}>(optional)</span></span>
+            <span style={{fontSize:14,color:V.text3}}>{showMeasurements?"▲":"▼"}</span>
+          </button>
+          {showMeasurements&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Field label="Waist" type="number" value={form.waist} onChange={v=>setForm(f=>({...f,waist:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+              <Field label="Hips" type="number" value={form.hips} onChange={v=>setForm(f=>({...f,hips:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+              <Field label="Chest" type="number" value={form.chest} onChange={v=>setForm(f=>({...f,chest:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+              <Field label="Neck" type="number" value={form.neck} onChange={v=>setForm(f=>({...f,neck:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+              <Field label="Biceps/Arms" type="number" value={form.arms} onChange={v=>setForm(f=>({...f,arms:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+              <Field label="Thighs" type="number" value={form.thighs} onChange={v=>setForm(f=>({...f,thighs:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+              <Field label="Calves" type="number" value={form.calves} onChange={v=>setForm(f=>({...f,calves:v}))} unit={s.units==="kg"?"cm":"in"} step="0.1"/>
+            </div>
+          )}
         </Sheet>
       )}
 
@@ -5936,7 +5979,7 @@ function Onboarding({d}){
       carbs:parseInt(goals.carbs)||250,fat:parseInt(goals.fat)||70,goalWeight:parseInt(goals.goalWeight)||175}});
     d({type:"SET_SCHEDULE",schedule:{weekly:splits[split].days,overrides:{}}});
     d({type:"SET_PROFILE",profile});
-    if(bw){d({type:"ADD_B",b:{id:uid(),date:today(),weight:parseFloat(bw)||0,bf:"",chest:"",waist:"",arms:"",thighs:""}});}
+    if(bw){d({type:"ADD_B",b:{id:uid(),date:today(),weight:parseFloat(bw)||0,bf:0,waist:0,hips:0,chest:0,neck:0,arms:0,thighs:0,calves:0}});}
     // Init auth key for this device
     AuthToken.init(profile.email);
     LS.set("ft-device-id",payload.deviceId);
@@ -14582,10 +14625,15 @@ function DailyMissionsCard({s,d,compact}){
       {/* Mission rows */}
       {missions.map((m,i)=>{
         const done=m.done||m.live;
+        const dest=m.cat==="workout"?"log_workout":m.cat==="nutrition"?"log_nutrition":m.cat==="social"?"social_feed":m.cat==="habits"?"home":"log_body";
         return(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",
-            borderBottom:i<2?`1px solid rgba(255,255,255,0.04)`:"none",
-            opacity:done?1:1}}>
+          <div key={i} onClick={()=>{if(!done&&d)d({type:"TAB",tab:dest});}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"9px 4px",
+              borderBottom:i<2?`1px solid rgba(255,255,255,0.04)`:"none",
+              cursor:done?"default":"pointer",borderRadius:8,transition:"background .15s",
+              WebkitTapHighlightColor:"transparent"}}
+            onMouseEnter={e=>{if(!done)e.currentTarget.style.background="rgba(255,255,255,0.03)";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
             <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
               background:done?"rgba(34,197,94,0.12)":"rgba(255,255,255,0.04)",
               border:`1px solid ${done?"rgba(34,197,94,0.3)":"rgba(255,255,255,0.06)"}`,
@@ -14596,7 +14644,7 @@ function DailyMissionsCard({s,d,compact}){
             <div style={{flex:1}}>
               <div style={{fontSize:12,fontWeight:700,color:done?"#22c55e":V.text,
                 textDecoration:done?"line-through":"none",transition:"color .3s"}}>{m.title}</div>
-              <div style={{fontSize:10,color:V.text3}}>{m.desc}</div>
+              <div style={{fontSize:10,color:V.text3}}>{done?m.desc:<span>{m.desc} <span style={{color:V.accent}}>→ Go</span></span>}</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
               <span style={{fontSize:11,fontWeight:800,color:done?"#22c55e":V.accent,
