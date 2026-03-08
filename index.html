@@ -15553,18 +15553,28 @@ function PlanHub({s,d}){
 // ─── Admin: Push Broadcast ───
 function AdminPush({s,d}){
   const email=s.profile?.email;
+
+  // ── Shared user list (loaded once, used by both push + in-app sections) ──
+  const [users,setUsers]=useState(null);
+  const [usersLoading,setUsersLoading]=useState(false);
+  const [userSearch,setUserSearch]=useState("");
+  const [dropdownOpen,setDropdownOpen]=useState(false);
+
+  // ── Push section state ──
+  const [pushTargetMode,setPushTargetMode]=useState("all"); // "all" | "selected"
+  const [pushSelected,setPushSelected]=useState(new Set()); // emails
   const [title,setTitle]=useState("IRONLOG");
   const [body,setBody]=useState("");
-  const [target,setTarget]=useState("");
   const [sending,setSending]=useState(false);
   const [result,setResult]=useState(null);
-  const [history,setHistory]=useState(()=>LS.get("ft-admin-push-history")||[]);
   const [subCount,setSubCount]=useState(null);
-  // ── In-app notification panel ──
-  const [notifUsers,setNotifUsers]=useState(null); // null=not loaded
-  const [notifLoading,setNotifLoading]=useState(false);
-  const [selectedEmails,setSelectedEmails]=useState(new Set());
-  const [userSearch,setUserSearch]=useState("");
+  const [history,setHistory]=useState(()=>LS.get("ft-admin-push-history")||[]);
+
+  // ── In-app section state ──
+  const [inAppTargetMode,setInAppTargetMode]=useState("all");
+  const [inAppSelected,setInAppSelected]=useState(new Set());
+  const [inAppDropdownOpen,setInAppDropdownOpen]=useState(false);
+  const [inAppSearch,setInAppSearch]=useState("");
   const [notifFlags,setNotifFlags]=useState({streak_reminder:false,double_xp:false,comeback:false,mission_reminder:false,shield_awarded:false,custom:false});
   const [customMsg,setCustomMsg]=useState("");
   const [customTitle,setCustomTitle]=useState("");
@@ -15580,38 +15590,12 @@ function AdminPush({s,d}){
     {key:"custom",icon:"📝",label:"Custom Message",desc:"Write your own notification"},
   ];
 
-  const loadNotifUsers=()=>{
-    if(notifUsers!==null)return;
-    setNotifLoading(true);
+  const loadUsers=()=>{
+    if(users!==null||usersLoading)return;
+    setUsersLoading(true);
     fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
       body:JSON.stringify({action:"users"})})
-      .then(r=>r.json()).then(j=>{setNotifUsers(j?.users||[]);setNotifLoading(false);}).catch(()=>{setNotifLoading(false);});
-  };
-
-  const filteredNotifUsers=(notifUsers||[]).filter(u=>
-    !userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.email?.toLowerCase().includes(userSearch.toLowerCase())
-  );
-  const allSelected=filteredNotifUsers.length>0&&filteredNotifUsers.every(u=>selectedEmails.has(u.email));
-  const toggleSelectAll=()=>{
-    if(allSelected){const s=new Set(selectedEmails);filteredNotifUsers.forEach(u=>s.delete(u.email));setSelectedEmails(s);}
-    else{const s=new Set(selectedEmails);filteredNotifUsers.forEach(u=>s.add(u.email));setSelectedEmails(s);}
-  };
-  const toggleUser=(e)=>{const s=new Set(selectedEmails);s.has(e)?s.delete(e):s.add(e);setSelectedEmails(s);};
-
-  const sendInApp=async()=>{
-    if(selectedEmails.size===0)return;
-    const activeFlags=Object.fromEntries(Object.entries(notifFlags).filter(([,v])=>v));
-    if(notifFlags.custom&&customMsg.trim()){activeFlags.custom=customMsg.trim();if(customTitle.trim())activeFlags.custom_title=customTitle.trim();}
-    if(!Object.keys(activeFlags).length){setNotifResult({ok:false,msg:"Select at least one notification type"});return;}
-    setNotifSending(true);setNotifResult(null);
-    const targets=[...selectedEmails];
-    const results=await Promise.allSettled(targets.map(te=>
-      fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
-        body:JSON.stringify({action:"set_notif_flags",email:te,flags:activeFlags})}).then(r=>r.ok)
-    ));
-    const ok=results.filter(r=>r.value===true).length;
-    setNotifResult({ok:ok>0,msg:`Queued for ${ok}/${targets.length} user${targets.length!==1?"s":""} — fires when they open the app`});
-    setNotifSending(false);
+      .then(r=>r.json()).then(j=>{setUsers(j?.users||[]);setUsersLoading(false);}).catch(()=>setUsersLoading(false));
   };
 
   useEffect(()=>{
@@ -15620,6 +15604,135 @@ function AdminPush({s,d}){
       body:JSON.stringify({action:"count"})})
       .then(r=>r.json()).then(j=>{if(j.count!=null)setSubCount(j.count);}).catch(()=>{});
   },[email]);
+
+  const filteredUsers=(search)=>(users||[]).filter(u=>
+    !search||u.name?.toLowerCase().includes(search.toLowerCase())||u.email?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // ── Reusable multi-select user picker ──
+  const UserPicker=({targetMode,setTargetMode,selected,setSelected,open,setOpen,search,setSearch,label})=>{
+    const filtered=filteredUsers(search);
+    const allSel=filtered.length>0&&filtered.every(u=>selected.has(u.email));
+    const toggle=(e)=>{const ns=new Set(selected);ns.has(e)?ns.delete(e):ns.add(e);setSelected(ns);};
+    const toggleAll=()=>{
+      if(allSel){const ns=new Set(selected);filtered.forEach(u=>ns.delete(u.email));setSelected(ns);}
+      else{const ns=new Set(selected);filtered.forEach(u=>ns.add(u.email));setSelected(ns);}
+    };
+    const selNames=[...(users||[])].filter(u=>selected.has(u.email)).map(u=>u.name||u.email.split("@")[0]);
+
+    return(
+      <div>
+        <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>{label}</div>
+        {/* Mode toggle */}
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          {[{v:"all",l:"📣 All Users"},{v:"selected",l:"👤 Specific Users"}].map(opt=>(
+            <button key={opt.v} onClick={()=>{setTargetMode(opt.v);if(opt.v==="selected"&&users===null)loadUsers();}}
+              style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1px solid ${targetMode===opt.v?V.accent+"60":V.cardBorder}`,
+                background:targetMode===opt.v?`${V.accent}12`:"rgba(255,255,255,0.02)",cursor:"pointer",
+                fontSize:11,fontWeight:700,color:targetMode===opt.v?V.accent:V.text3,fontFamily:V.font,transition:"all .15s"}}>
+              {opt.l}
+            </button>
+          ))}
+        </div>
+
+        {targetMode==="selected"&&(
+          <div style={{position:"relative"}}>
+            {/* Selected chips */}
+            {selected.size>0&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:6}}>
+                {[...(users||[])].filter(u=>selected.has(u.email)).map(u=>(
+                  <div key={u.email} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px 3px 10px",
+                    borderRadius:20,background:`${V.accent}15`,border:`1px solid ${V.accent}30`}}>
+                    <span style={{fontSize:11,fontWeight:600,color:V.accent}}>{u.name||u.email.split("@")[0]}</span>
+                    <button onClick={(e)=>{e.stopPropagation();toggle(u.email);}}
+                      style={{background:"none",border:"none",cursor:"pointer",padding:0,lineHeight:1,
+                        fontSize:12,color:V.accent,opacity:.7,marginTop:1}}>×</button>
+                  </div>
+                ))}
+                <button onClick={()=>setSelected(new Set())}
+                  style={{padding:"3px 8px",borderRadius:20,background:"rgba(255,255,255,0.04)",
+                    border:`1px solid ${V.cardBorder}`,cursor:"pointer",fontSize:10,color:V.text3,fontFamily:V.font}}>
+                  Clear all
+                </button>
+              </div>
+            )}
+
+            {/* Dropdown trigger */}
+            <button onClick={()=>{setOpen(v=>!v);if(!open&&users===null)loadUsers();}}
+              style={{width:"100%",padding:"10px 12px",borderRadius:10,
+                background:"rgba(255,255,255,0.04)",border:`1px solid ${open?V.accent+"60":V.cardBorder}`,
+                cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
+                fontFamily:V.font,transition:"all .15s"}}>
+              <span style={{fontSize:12,color:selected.size>0?V.text:V.text3}}>
+                {usersLoading?"Loading users…":selected.size>0?`${selected.size} user${selected.size!==1?"s":""} selected`:"Search and select users…"}
+              </span>
+              <span style={{fontSize:12,color:V.text3,transition:"transform .2s",
+                display:"inline-block",transform:open?"rotate(180deg)":"rotate(0deg)"}}>▾</span>
+            </button>
+
+            {/* Dropdown list */}
+            {open&&(
+              <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:200,
+                background:V.sheetBg,border:`1px solid ${V.accent}40`,borderRadius:12,
+                boxShadow:"0 8px 32px rgba(0,0,0,0.4)",overflow:"hidden"}}>
+                {/* Search inside dropdown */}
+                <div style={{padding:"8px 10px",borderBottom:`1px solid ${V.cardBorder}`}}>
+                  <input value={search} onChange={e=>setSearch(e.target.value)}
+                    placeholder="Search by name or email…" autoFocus
+                    style={{width:"100%",padding:"8px 12px",background:"rgba(255,255,255,0.06)",
+                      border:`1px solid ${V.cardBorder}`,borderRadius:8,color:V.text,fontSize:12,
+                      outline:"none",fontFamily:V.font,boxSizing:"border-box"}}/>
+                </div>
+                {/* Select all row */}
+                <div onClick={toggleAll}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer",
+                    borderBottom:`1px solid ${V.cardBorder}`,background:"rgba(255,255,255,0.02)"}}>
+                  <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${allSel?V.accent:V.text3}`,flexShrink:0,
+                    background:allSel?V.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {allSel&&<span style={{color:V.bg,fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:allSel?V.accent:V.text3}}>
+                    {allSel?"Deselect all":"Select all"} {search?`(${filtered.length} matching)`:`(${(users||[]).length} users)`}
+                  </span>
+                </div>
+                {/* User rows */}
+                <div style={{maxHeight:220,overflowY:"auto"}}>
+                  {filtered.length===0&&<div style={{padding:16,textAlign:"center",fontSize:12,color:V.text3}}>No users found</div>}
+                  {filtered.map(u=>{
+                    const sel2=selected.has(u.email);
+                    return(
+                      <div key={u.email} onClick={()=>toggle(u.email)}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer",
+                          background:sel2?`${V.accent}08`:"transparent",
+                          borderBottom:`1px solid rgba(255,255,255,0.03)`,transition:"background .1s"}}>
+                        <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${sel2?V.accent:V.text3}`,flexShrink:0,
+                          background:sel2?V.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          {sel2&&<span style={{color:V.bg,fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:sel2?700:500,color:sel2?V.text:V.text3,
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name||u.email.split("@")[0]}</div>
+                          <div style={{fontSize:10,color:V.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email}</div>
+                        </div>
+                        {u.lastSync&&<div style={{fontSize:8,color:V.text3,flexShrink:0}}>active</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {targetMode==="selected"&&selected.size>0&&(
+          <div style={{fontSize:10,color:V.text3,marginTop:4}}>
+            {selected.size} user{selected.size!==1?"s":""} selected
+            {subCount!=null&&pushTargetMode==="all"?"":" · only users with push enabled will receive it"}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const TEMPLATES=[
     {icon:"🔥",label:"Motivate",title:"IRONLOG",body:"Don't break the streak today — every rep counts. Let's go! 💪"},
@@ -15631,32 +15744,68 @@ function AdminPush({s,d}){
   const send=async()=>{
     if(!body.trim())return;
     setSending(true);setResult(null);
+    // Build target list
+    const targets=pushTargetMode==="selected"?[...pushSelected]:[];
     try{
-      const res=await fetch(`${SYNC_URL}/api/push`,{method:"POST",
-        headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
-        body:JSON.stringify({action:"send",title:title.trim()||"IRONLOG",body:body.trim(),
-          tag:"admin-broadcast",...(target.trim()?{email:target.trim().toLowerCase()}:{})})});
-      const json=await res.json();
-      if(res.ok){
+      if(pushTargetMode==="all"){
+        // Single broadcast to all
+        const res=await fetch(`${SYNC_URL}/api/push`,{method:"POST",
+          headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
+          body:JSON.stringify({action:"send",title:title.trim()||"IRONLOG",body:body.trim(),tag:"admin-broadcast"})});
+        const json=await res.json();
+        if(res.ok){
+          const entry={ts:new Date().toISOString(),title:title.trim()||"IRONLOG",body:body.trim(),
+            target:"All users",sent:json.sent,failed:json.failed||0};
+          const updated=[entry,...history].slice(0,20);setHistory(updated);LS.set("ft-admin-push-history",updated);
+          setResult({ok:true,msg:`Sent to ${json.sent} device${json.sent!==1?"s":""} · ${json.failed||0} failed`});
+          setBody("");
+        }else setResult({ok:false,msg:res.status===401?"Unauthorized":res.status===403?"Forbidden":json.error||"Failed"});
+      }else{
+        // Send to each selected user individually
+        if(targets.length===0){setResult({ok:false,msg:"Select at least one user"});setSending(false);return;}
+        const outcomes=await Promise.allSettled(targets.map(te=>
+          fetch(`${SYNC_URL}/api/push`,{method:"POST",
+            headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
+            body:JSON.stringify({action:"send",title:title.trim()||"IRONLOG",body:body.trim(),tag:"admin-broadcast",email:te})})
+            .then(r=>r.json().then(j=>({ok:r.ok,sent:j.sent||0,failed:j.failed||0})))
+        ));
+        const totalSent=outcomes.reduce((a,r)=>a+(r.value?.sent||0),0);
+        const totalFailed=outcomes.reduce((a,r)=>a+(r.value?.failed||0),0);
         const entry={ts:new Date().toISOString(),title:title.trim()||"IRONLOG",body:body.trim(),
-          target:target.trim()||"all",sent:json.sent,failed:json.failed||0};
-        const updated=[entry,...history].slice(0,20);
-        setHistory(updated);LS.set("ft-admin-push-history",updated);
-        setResult({ok:true,msg:`Sent to ${json.sent} device${json.sent!==1?"s":""} · ${json.failed||0} failed`});
-        setBody("");
-      }else setResult({ok:false,msg:res.status===401?"Unauthorized — ensure your account has admin privileges in the database":res.status===403?"Forbidden":json.error||"Failed"});
+          target:`${targets.length} users`,sent:totalSent,failed:totalFailed};
+        const updated=[entry,...history].slice(0,20);setHistory(updated);LS.set("ft-admin-push-history",updated);
+        setResult({ok:totalSent>0,msg:`Sent to ${totalSent} device${totalSent!==1?"s":""} · ${totalFailed} failed · ${targets.length} users targeted`});
+        if(totalSent>0)setBody("");
+      }
     }catch(e){setResult({ok:false,msg:e.message});}
     setSending(false);
+  };
+
+  const sendInApp=async()=>{
+    const targets=inAppTargetMode==="all"?(users||[]).map(u=>u.email):[...inAppSelected];
+    if(targets.length===0){setNotifResult({ok:false,msg:inAppTargetMode==="selected"?"Select at least one user":"No users loaded — load users first"});return;}
+    const activeFlags=Object.fromEntries(Object.entries(notifFlags).filter(([,v])=>v));
+    if(notifFlags.custom&&customMsg.trim()){activeFlags.custom=customMsg.trim();if(customTitle.trim())activeFlags.custom_title=customTitle.trim();}
+    if(!Object.keys(activeFlags).length){setNotifResult({ok:false,msg:"Select at least one notification type"});return;}
+    setNotifSending(true);setNotifResult(null);
+    const results=await Promise.allSettled(targets.map(te=>
+      fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers:{...AuthToken.getHeaders(email),"Content-Type":"application/json"},
+        body:JSON.stringify({action:"set_notif_flags",email:te,flags:activeFlags})}).then(r=>r.ok)
+    ));
+    const ok=results.filter(r=>r.value===true).length;
+    setNotifResult({ok:ok>0,msg:`Queued for ${ok}/${targets.length} user${targets.length!==1?"s":""} — fires when they open the app`});
+    setNotifSending(false);
   };
 
   const fmtTs=(ts)=>{const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});};
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontSize:16,fontWeight:800,color:V.text}}>📣 Push Broadcast</div>
-          <div style={{fontSize:11,color:V.text3}}>Send to all users or target one by email</div>
+          <div style={{fontSize:11,color:V.text3}}>Send push notifications to all users or specific people</div>
         </div>
         {subCount!=null&&(
           <div style={{textAlign:"right",padding:"6px 12px",borderRadius:10,background:`${V.accent}10`,border:`1px solid ${V.accent}20`}}>
@@ -15666,6 +15815,7 @@ function AdminPush({s,d}){
         )}
       </div>
 
+      {/* Quick templates */}
       <div>
         <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>Quick Templates</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
@@ -15680,13 +15830,16 @@ function AdminPush({s,d}){
         </div>
       </div>
 
-      <Card style={{padding:14,display:"flex",flexDirection:"column",gap:10}}>
+      {/* Compose card */}
+      <Card style={{padding:14,display:"flex",flexDirection:"column",gap:12}}>
+        {/* Title */}
         <div>
           <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Title</div>
           <input value={title} onChange={e=>setTitle(e.target.value)} maxLength={64}
             style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
               borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,boxSizing:"border-box"}}/>
         </div>
+        {/* Message */}
         <div>
           <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Message</div>
           <textarea value={body} onChange={e=>setBody(e.target.value)} maxLength={200} rows={3}
@@ -15695,14 +15848,15 @@ function AdminPush({s,d}){
               borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,resize:"none",boxSizing:"border-box"}}/>
           <div style={{fontSize:9,color:body.length>180?V.warn:V.text3,textAlign:"right",marginTop:2}}>{body.length}/200</div>
         </div>
-        <div>
-          <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>
-            Target <span style={{color:V.text3,fontWeight:400,textTransform:"none"}}>(blank = all {subCount!=null?subCount+" ":""}users)</span>
-          </div>
-          <input value={target} onChange={e=>setTarget(e.target.value)} placeholder="user@example.com or leave blank for broadcast"
-            style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
-              borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,boxSizing:"border-box"}}/>
-        </div>
+
+        {/* Target picker */}
+        <UserPicker
+          targetMode={pushTargetMode} setTargetMode={setPushTargetMode}
+          selected={pushSelected} setSelected={setPushSelected}
+          open={dropdownOpen} setOpen={setDropdownOpen}
+          search={userSearch} setSearch={setUserSearch}
+          label="Send To"
+        />
 
         {result&&(
           <div style={{padding:"10px 12px",borderRadius:8,
@@ -15715,7 +15869,7 @@ function AdminPush({s,d}){
 
         <Btn full onClick={send} disabled={!body.trim()||sending}
           s={{background:sending?"rgba(255,255,255,0.06)":undefined}}>
-          {sending?"Sending…":`📣 Send ${target.trim()?"to "+target.split("@")[0]:"to All Users"}`}
+          {sending?"Sending…":`📣 ${pushTargetMode==="all"?`Send to All${subCount!=null?" ("+subCount+")":""}`:pushSelected.size>0?`Send to ${pushSelected.size} User${pushSelected.size!==1?"s":""}`:  "Send Push"}`}
         </Btn>
 
         <div style={{fontSize:10,color:V.text3,textAlign:"center",lineHeight:1.5}}>
@@ -15724,58 +15878,33 @@ function AdminPush({s,d}){
         </div>
       </Card>
 
-      {/* ── In-App Notification Toggles ── */}
+      {/* ── In-App Notification section ── */}
       <div style={{borderTop:`1px solid ${V.cardBorder}`,paddingTop:14}}>
         <div style={{fontSize:14,fontWeight:800,color:V.text,marginBottom:4}}>🔔 In-App Notifications</div>
-        <div style={{fontSize:11,color:V.text3,marginBottom:12}}>Fires as a banner the next time the user opens the app or switches tabs.</div>
-        {/* User selector */}
-        <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <div style={{fontSize:10,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em"}}>
-              Target Users {selectedEmails.size>0&&<span style={{color:V.accent}}>· {selectedEmails.size} selected</span>}
-            </div>
-            {notifUsers===null?(
-              <button onClick={loadNotifUsers} style={{background:"none",border:`1px solid ${V.accent}`,borderRadius:6,
-                padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:V.accent}}>
-                {notifLoading?"Loading…":"Load Users"}
-              </button>
-            ):(
-              <button onClick={toggleSelectAll} style={{background:"none",border:`1px solid ${allSelected?V.danger:V.accent}`,borderRadius:6,
-                padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:allSelected?V.danger:V.accent}}>
-                {allSelected?"Deselect All":"Select All"}
-              </button>
-            )}
-          </div>
-          {notifUsers!==null&&(
-            <>
-              <input value={userSearch} onChange={e=>setUserSearch(e.target.value)} placeholder="Search users…"
-                style={{width:"100%",padding:"8px 12px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
-                  borderRadius:8,color:V.text,fontSize:12,outline:"none",fontFamily:V.font,boxSizing:"border-box",marginBottom:6}}/>
-              <div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:4,
-                border:`1px solid ${V.cardBorder}`,borderRadius:10,padding:6}}>
-                {filteredNotifUsers.length===0&&<div style={{fontSize:11,color:V.text3,textAlign:"center",padding:12}}>No users found</div>}
-                {filteredNotifUsers.map(u=>{
-                  const sel=selectedEmails.has(u.email);
-                  return(
-                    <div key={u.email} onClick={()=>toggleUser(u.email)}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",
-                        background:sel?`${V.accent}10`:"transparent",border:`1px solid ${sel?V.accent+"30":"transparent"}`,
-                        transition:"all .1s"}}>
-                      <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${sel?V.accent:V.text3}`,flexShrink:0,
-                        background:sel?V.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        {sel&&<span style={{color:V.bg,fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:sel?700:500,color:sel?V.text:V.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name||u.email.split("@")[0]}</div>
-                        <div style={{fontSize:10,color:V.text3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+        <div style={{fontSize:11,color:V.text3,marginBottom:12}}>Fires as a banner the next time the user opens the app. No push permission needed.</div>
+
+        {/* In-app target */}
+        <div style={{marginBottom:12}}>
+          <UserPicker
+            targetMode={inAppTargetMode} setTargetMode={setInAppTargetMode}
+            selected={inAppSelected} setSelected={setInAppSelected}
+            open={inAppDropdownOpen} setOpen={setInAppDropdownOpen}
+            search={inAppSearch} setSearch={setInAppSearch}
+            label="Target Users"
+          />
+          {inAppTargetMode==="all"&&users===null&&(
+            <button onClick={loadUsers}
+              style={{marginTop:6,padding:"6px 14px",borderRadius:8,background:"rgba(255,255,255,0.04)",
+                border:`1px solid ${V.cardBorder}`,cursor:"pointer",fontSize:11,color:V.text3,fontFamily:V.font}}>
+              {usersLoading?"Loading…":"Load users for broadcast count"}
+            </button>
+          )}
+          {inAppTargetMode==="all"&&users!==null&&(
+            <div style={{fontSize:10,color:V.text3,marginTop:4}}>Will queue for all {users.length} users</div>
           )}
         </div>
+
+        {/* Notification type toggles */}
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
           {NOTIF_TYPES.map(nt=>(
             <div key={nt.key} onClick={()=>setNotifFlags(f=>({...f,[nt.key]:!f[nt.key]}))}
@@ -15795,6 +15924,7 @@ function AdminPush({s,d}){
             </div>
           ))}
         </div>
+
         {notifFlags.custom&&(
           <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
             <input value={customTitle} onChange={e=>setCustomTitle(e.target.value)} placeholder="Title (optional, defaults to IRONLOG)"
@@ -15806,6 +15936,7 @@ function AdminPush({s,d}){
                 borderRadius:8,color:V.text,fontSize:13,outline:"none",fontFamily:V.font,resize:"none",boxSizing:"border-box"}}/>
           </div>
         )}
+
         {notifResult&&(
           <div style={{padding:"10px 12px",borderRadius:8,marginBottom:8,
             background:notifResult.ok?`${V.accent}10`:`${V.danger}10`,
@@ -15814,15 +15945,16 @@ function AdminPush({s,d}){
             {notifResult.ok?"✅ ":"❌ "}{notifResult.msg}
           </div>
         )}
-        <button onClick={sendInApp} disabled={selectedEmails.size===0||notifSending||!Object.values(notifFlags).some(Boolean)}
+        <button onClick={sendInApp} disabled={notifSending||!Object.values(notifFlags).some(Boolean)}
           style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:V.font,
             fontSize:13,fontWeight:800,transition:"all .2s",
-            background:selectedEmails.size>0&&Object.values(notifFlags).some(Boolean)?`linear-gradient(135deg,${V.accent},${V.accent2})`:"rgba(255,255,255,0.06)",
-            color:selectedEmails.size>0&&Object.values(notifFlags).some(Boolean)?V.bg:V.text3}}>
+            background:Object.values(notifFlags).some(Boolean)?`linear-gradient(135deg,${V.accent},${V.accent2})`:"rgba(255,255,255,0.06)",
+            color:Object.values(notifFlags).some(Boolean)?V.bg:V.text3}}>
           {notifSending?"Queuing…":"🔔 Queue In-App Notification"}
         </button>
       </div>
 
+      {/* Send history */}
       {history.length>0&&(
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -15836,7 +15968,7 @@ function AdminPush({s,d}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:2}}>{h.title}</div>
                   <div style={{fontSize:11,color:V.text3,lineHeight:1.4}}>{h.body}</div>
-                  <div style={{fontSize:10,color:V.text3,marginTop:4}}>{h.target==="all"?"→ All users":`→ ${h.target}`}</div>
+                  <div style={{fontSize:10,color:V.text3,marginTop:4}}>→ {h.target}</div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
                   <div style={{fontSize:13,fontWeight:800,color:V.accent,fontFamily:V.mono}}>{h.sent}</div>
@@ -15852,6 +15984,7 @@ function AdminPush({s,d}){
     </div>
   );
 }
+
 
 // ─── Admin Hub (admin nav tab — only renders for admins) ───
 
