@@ -697,6 +697,7 @@ const CloudSync={
           war_wins:          LS.get("ft-war-wins")||0,
           war_streak:        LS.get("ft-war-streak")||0,
           comeback_used:     LS.get("ft-comeback-used")||null,
+          duel_record:       LS.get("ft-duel-record")||{wins:0,losses:0,ties:0},
         }},
     });
     try{
@@ -1545,7 +1546,7 @@ function genDemo(){
   LS.set("ft-war-wins",8);                    // 8 weekly war wins
   LS.set("ft-war-streak",4);                  // Current 4-war win streak
   LS.set("ft-last-war-win",ago(7));
-  LS.set("ft-war-claimed-"+Math.floor((Date.now()-new Date("2026-01-05").getTime())/(7*86400000)),null); // This week claimable
+  LS.set("ft-war-claimed-"+Math.floor((Date.now()-WAR_EPOCH)/(7*86400000)),null); // This week claimable
   LS.set("ft-friend-count",4);               // social_3friends badge
   LS.set("ft-created-group",true);           // social_group badge
   LS.set("ft-reacted-today",today());        // m_react mission completable
@@ -2597,8 +2598,8 @@ function calcReadiness(s){
 
   // 4. Training volume trend (-10 to +10) — overreaching detection
   if(recentW.length>0&&prevWeekW.length>0){
-    const thisVol=recentW.reduce((s2,w)=>s2+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
-    const lastVol=prevWeekW.reduce((s2,w)=>s2+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
+    const thisVol=recentW.reduce((s2,w)=>s2+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0),0);
+    const lastVol=prevWeekW.reduce((s2,w)=>s2+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0),0);
     const ratio=lastVol>0?thisVol/lastVol:1;
     if(ratio>1.3){score-=10;factors.push({label:"Volume spike",val:`+${Math.round((ratio-1)*100)}%`,color:V.danger,pts:-10});}
     else if(ratio>1.1){score-=3;factors.push({label:"Volume up",val:`+${Math.round((ratio-1)*100)}%`,color:V.warn,pts:-3});}
@@ -2966,7 +2967,7 @@ function HomeTab({s,d}){
   const tn=s.nutrition.find(n=>n.date===td);
   const todayW=s.workouts.find(w=>w.date===td);
   const ww=s.workouts.filter(w=>w.date>=ago(7)).length;
-  const vol=s.workouts.filter(w=>w.date>=ago(7)).reduce((sum,w)=>sum+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
+  const vol=s.workouts.filter(w=>w.date>=ago(7)).reduce((sum,w)=>sum+w.exercises.reduce((es,ex)=>es+ex.sets.reduce((ss,st)=>ss+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0),0);
   const dow=new Date().getDay();
   const todayType=s.schedule.overrides[td]||s.schedule.weekly[dow]||"Rest";
   const u=wUnit(s.units);
@@ -3894,6 +3895,8 @@ function WorkoutTab({s,d}){
       const xpMsg=mult.mult>1?`+${displayXP} XP ${mult.icon} (${mult.mult}\u00d7 bonus!)`:
         detected.length>0?`+${30+prBonus+consistencyBonus} XP \u00b7 ${detected.length} PR${detected.length>1?"s":""}! \U0001f3af`:consistencyBonus>0?`+${30+consistencyBonus} XP \u00b7 consistency bonus! 🔄`:`+30 XP \U0001f4aa`;
       SuccessToastCtrl.show("Workout logged · "+xpMsg);
+      // Wire early bird mission flag (before 8am)
+      if(new Date().getHours()<8)LS.set("ft-workout-early-"+today(),true);
       // Check missions + milestones
       setTimeout(()=>checkAndAwardMissions({...s,workouts:[w,...s.workouts]},d),500);
       checkMilestones(s, w, detected);
@@ -4158,7 +4161,7 @@ function WorkoutTab({s,d}){
       {s.workouts.length===0?(
         <div style={{textAlign:"center",padding:40,color:V.text3,fontSize:13}}>No workouts yet</div>
       ):s.workouts.slice(0,showAll?999:15).map(w=>{
-        const vol=w.exercises.reduce((s2,e)=>s2+e.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0);
+        const vol=w.exercises.reduce((s2,e)=>s2+e.sets.reduce((ss,st)=>ss+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0);
         const expanded=expandedId===w.id;
         return(
           <Card key={w.id} onClick={()=>setExpandedId(expanded?null:w.id)} style={{padding:14,cursor:"pointer"}}>
@@ -4288,7 +4291,7 @@ function NutritionTab({s,d}){
 
   const autoCalc=()=>{
     let cal=0,protein=0,carbs=0,fat=0;
-    form.meals.forEach(m=>(m.items||[]).forEach(i=>{cal+=i.cal;protein+=i.protein;carbs+=i.carbs||0;fat+=i.fat||0;}));
+    form.meals.forEach(m=>(m.items||[]).forEach(i=>{cal+=(i.cal||0);protein+=(i.protein||0);carbs+=(i.carbs||0);fat+=(i.fat||0);}));
     setForm(f=>({...f,cal:cal.toString(),protein:protein.toString(),carbs:carbs.toString(),fat:fat.toString()}));
   };
 
@@ -4759,6 +4762,7 @@ function BodyTab({s,d}){
       arms:parseFloat(form.arms)||0,thighs:parseFloat(form.thighs)||0,
       calves:parseFloat(form.calves)||0}});
     Haptic.medium();SuccessToastCtrl.show("Logged ✓");
+    setTimeout(()=>checkAndAwardMissions({...s,body:[b,...s.body]},d),400);
     setShow(false);
     const lastPhotoDate=s.photos[0]?.date;
     const daysSincePhoto=lastPhotoDate?Math.round((Date.now()-new Date(lastPhotoDate+"T12:00:00"))/86400000):99;
@@ -5067,7 +5071,7 @@ function AnalyticsTab({s}){
       const ex=w.exercises.find(e=>e.exerciseId===selEx);
       if(ex){
         const mw=Math.max(...ex.sets.map(st=>st.weight));
-        const vol=ex.sets.reduce((s,st)=>s+st.weight*st.reps,0);
+        const vol=ex.sets.reduce((s,st)=>s+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0);
         const e1rm=Math.max(...ex.sets.map(st=>st.weight*(1+st.reps/30)));
         arr.push({date:fmtShort(w.date),max:mw,vol,e1rm:Math.round(e1rm)});
       }
@@ -5079,7 +5083,7 @@ function AnalyticsTab({s}){
     const g={};
     s.workouts.filter(w=>w.date>=ago(s.range)).forEach(w=>w.exercises.forEach(ex=>{
       const info=s.exercises.find(e=>e.id===ex.exerciseId);
-      if(info){const v=ex.sets.reduce((s,st)=>s+st.weight*st.reps,0);g[info.cat]=(g[info.cat]||0)+v;}
+      if(info){const v=ex.sets.reduce((s,st)=>s+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0);g[info.cat]=(g[info.cat]||0)+v;}
     }));
     return Object.entries(g).map(([name,value])=>({name,value}));
   },[s.workouts,s.exercises,s.range]);
@@ -6734,6 +6738,8 @@ function Onboarding({d}){
       if(g.war_wins>0&&!LS.get("ft-war-wins"))LS.set("ft-war-wins",g.war_wins);
       if(g.war_streak>0&&!LS.get("ft-war-streak"))LS.set("ft-war-streak",g.war_streak);
       if(g.comeback_used&&!LS.get("ft-comeback-used"))LS.set("ft-comeback-used",g.comeback_used);
+      if(g.duel_record){const local=LS.get("ft-duel-record")||{wins:0,losses:0,ties:0};
+        if((g.duel_record.wins||0)>(local.wins||0))LS.set("ft-duel-record",g.duel_record);}
     }
     // Create server session for this device
     if(pinUsed)SessionManager.create(signInEmail.trim().toLowerCase(),pinUsed,LS.get("ft-device-id"));
@@ -8414,6 +8420,8 @@ function DataManager({s,d}){
         if(g.war_streak>0&&!LS.get("ft-war-streak"))LS.set("ft-war-streak",g.war_streak);
         if(g.shield_used_date&&!LS.get("ft-shield-used-date"))LS.set("ft-shield-used-date",g.shield_used_date);
         if(g.comeback_used&&!LS.get("ft-comeback-used"))LS.set("ft-comeback-used",g.comeback_used);
+        if(g.duel_record){const local=LS.get("ft-duel-record")||{wins:0,losses:0,ties:0};
+          if((g.duel_record.wins||0)>(local.wins||0))LS.set("ft-duel-record",g.duel_record);}
       }
       setMsg({type:"success",text:`Restored from cloud! +${newW.length} workouts, +${newN.length} nutrition, +${newB.length} measurements, +${newC.length} check-ins, +${newM.length} goals`});
     }else{
@@ -9885,21 +9893,24 @@ function GoalEngine({s,d}){
 
   // B3 fix: s.milestones mixes structured goals (type/target/deadline) with freeform
   // log entries (text/date from demo or auto-milestones). Only render structured goals here.
+  // Structured goals (type/target/deadline) — safe to modify
   const goals=(s.milestones||[]).filter(g=>g.target!=null&&g.deadline);
+  // Freeform entries (auto-milestones, log entries) — must be preserved on every write
+  const freeformMilestones=(s.milestones||[]).filter(g=>g.target==null||!g.deadline);
 
   const addGoal=()=>{
     if(!form.target||!form.deadline)return;
     const g={id:uid(),type:form.type,target:parseFloat(form.target),deadline:form.deadline,
       label:form.label||`${form.type==="weight"?"Reach":"Hit"} ${form.target}`,
       created:today(),completed:false};
-    d({type:"SET_MILESTONES",milestones:[...goals,g]});
+    d({type:"SET_MILESTONES",milestones:[...freeformMilestones,...goals,g]});
     SuccessToastCtrl.show("Goal created");
     setForm({type:"weight",target:"",deadline:"",label:""});
     setShowAdd(false);
   };
 
-  const deleteGoal=(id)=>{d({type:"SET_MILESTONES",milestones:goals.filter(g=>g.id!==id)});SuccessToastCtrl.show("Goal deleted");};
-  const completeGoal=(id)=>{d({type:"SET_MILESTONES",milestones:goals.map(g=>g.id===id?{...g,completed:true,completedDate:today()}:g)});SuccessToastCtrl.show("Goal completed! 🎉");};
+  const deleteGoal=(id)=>{d({type:"SET_MILESTONES",milestones:[...freeformMilestones,...goals.filter(g=>g.id!==id)]});SuccessToastCtrl.show("Goal deleted");};
+  const completeGoal=(id)=>{d({type:"SET_MILESTONES",milestones:[...freeformMilestones,...goals.map(g=>g.id===id?{...g,completed:true,completedDate:today()}:g)]});SuccessToastCtrl.show("Goal completed! 🎉");};
 
   const calcProgress=(g)=>{
     if(g.type==="weight"){
@@ -10252,7 +10263,7 @@ function WorkoutCard({workout,s}){
     ctx.fillStyle="#888";ctx.font="14px -apple-system, sans-serif";
     ctx.fillText(new Date(workout.date).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}),24,72);
     const totalSets=workout.exercises.reduce((n,e)=>n+e.sets.length,0);
-    const totalVol=workout.exercises.reduce((v,e)=>v+e.sets.reduce((s2,st)=>s2+st.weight*st.reps,0),0);
+    const totalVol=workout.exercises.reduce((v,e)=>v+e.sets.reduce((s2,st)=>s2+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0);
     [{l:"Duration",v:`${workout.dur||0}min`},{l:"Exercises",v:workout.exercises.length},
       {l:"Sets",v:totalSets},{l:"Volume",v:totalVol>1000?`${(totalVol/1000).toFixed(1)}k`:totalVol}
     ].forEach((st,i)=>{
@@ -10593,7 +10604,7 @@ function PhaseTracker({s,d}){
     const startBW=bs.length?bs[bs.length-1].weight:null;
     const endBW=bs.length?bs[0].weight:null;
     const avgCal=ns.length?Math.round(ns.reduce((a,n)=>a+n.cal,0)/ns.length):0;
-    const totalVol=ws.reduce((v,w)=>v+w.exercises.reduce((e,ex)=>e+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
+    const totalVol=ws.reduce((v,w)=>v+w.exercises.reduce((e,ex)=>e+ex.sets.reduce((ss,st)=>ss+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0),0);
     const days=phase.end?Math.ceil((new Date(phase.end)-new Date(phase.start))/86400000):Math.ceil((new Date()-new Date(phase.start))/86400000);
     return{workouts:ws.length,days,startBW,endBW,bwChange:startBW&&endBW?(endBW-startBW).toFixed(1):null,avgCal,totalVol};
   };
@@ -10939,7 +10950,7 @@ function WeeklySummary({s}){
     const ws=s.workouts.filter(w=>w.date>=ago(7));
     const ns=s.nutrition.filter(n=>n.date>=ago(7));
     const r=calcReadiness(s);
-    const totalVol=ws.reduce((v,w)=>v+w.exercises.reduce((e,ex)=>e+ex.sets.reduce((ss,st)=>ss+st.weight*st.reps,0),0),0);
+    const totalVol=ws.reduce((v,w)=>v+w.exercises.reduce((e,ex)=>e+ex.sets.reduce((ss,st)=>ss+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0),0);
     const avgCal=ns.length?Math.round(ns.reduce((a,n)=>a+n.cal,0)/ns.length):0;
     const avgProt=ns.length?Math.round(ns.reduce((a,n)=>a+n.protein,0)/ns.length):0;
     const protHit=ns.filter(n=>n.protein>=s.goals.protein*0.8).length;
@@ -12139,6 +12150,7 @@ function SocialFriends({s,d}){
       setDmMessages(updated);LS.set(`ft-dm-${friendEmail}`,updated);
       SocialAPI.sendDM(email,friendEmail,dmInput.trim(),displayName);
       SocialAPI.notifyDM(email,friendEmail,displayName,dmInput.trim(),false);
+      LS.set("ft-dm-sent-today",today());
       setDmInput("");
     }
     setTimeout(()=>dmEndRef.current?.scrollIntoView({behavior:"smooth"}),100);
@@ -12931,6 +12943,7 @@ function IMConversation({s,email,displayName,friend,onBack}){
       setMessages(prev=>{const u=[...prev,msg].slice(-150);LS.set(`ft-dm-${friend.email}`,u);lastMsgTsRef.current=now;return u;});
       SocialAPI.sendDM(email,friend.email,input.trim(),displayName);
       SocialAPI.notifyDM(email,friend.email,displayName,input.trim(),false);
+      LS.set("ft-dm-sent-today",today());
       setInput("");
     }
     scrollToBottom(true);
@@ -13202,6 +13215,7 @@ function IMConversation({s,email,displayName,friend,onBack}){
             setMessages(prev=>{const u=[...prev,qmsg].slice(-150);LS.set(`ft-dm-${friend.email}`,u);lastMsgTsRef.current=now;return u;});
             SocialAPI.sendDM(email,friend.email,msg,displayName);
             SocialAPI.notifyDM(email,friend.email,displayName,msg,false);
+            LS.set("ft-dm-sent-today",today());
             Haptic.light();
             scrollToBottom(true);
           }} style={{padding:"5px 11px",borderRadius:14,flexShrink:0,
@@ -14285,7 +14299,7 @@ function SocialCompare({s}){
 function SocialLeaderboard({s,d}){
   const email=s.profile?.email;
   const [mode,setMode]=useState("group"); // group | friends
-  const [metric,setMetric]=useState("streak"); // streak | volume | workouts | big3
+  const [metric,setMetric]=useState("streak"); // streak | volume | workouts | big3 | duels
   const [groups,setGroups]=useState(null);
   const [members,setMembers]=useState(null);
   const [selGroup,setSelGroup]=useState(null);
@@ -14305,50 +14319,53 @@ function SocialLeaderboard({s,d}){
   const myBig3=getBest("bench")+getBest("squat")+getBest("deadlift");
   const myWeekVol=Math.round(s.workouts.filter(w=>w.date>=ago(7)).reduce((a,w)=>a+w.exercises.reduce((b2,e)=>b2+e.sets.reduce((c,st)=>c+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0),0),0),0));
   const myWeekWorkouts=s.workouts.filter(w=>w.date>=ago(7)).length;
+  const myDuelRecord=LS.get("ft-duel-record")||{wins:0,losses:0,ties:0};
+  const myDuelWins=myDuelRecord.wins||0;
 
-  // My row for the board
   const myRow={email,name:s.profile?.firstName?`${s.profile.firstName} ${s.profile.lastName||""}`.trim():"You",
-    isMe:true,streak,big3:myBig3,weekVol:myWeekVol,weekWorkouts:myWeekWorkouts};
+    isMe:true,streak,big3:myBig3,weekVol:myWeekVol,weekWorkouts:myWeekWorkouts,duelWins:myDuelWins};
 
   const METRICS=[
     {id:"streak",label:"🔥 Streak",unit:"days",key:"streak"},
     {id:"workouts",label:"💪 Workouts",unit:"this week",key:"weekWorkouts"},
     {id:"volume",label:"⚡ Volume",unit:"lbs/week",key:"weekVol"},
     {id:"big3",label:"🏋️ Big 3",unit:"lbs",key:"big3"},
+    {id:"duels",label:"⚔️ Duels",unit:"wins",key:"duelWins"},
   ];
   const curMetric=METRICS.find(m=>m.id===metric)||METRICS[0];
 
   const getMemberVal=(m)=>{
     if(metric==="streak")return parseInt(m.challenges?.find(c=>c.challenge_id==="streak")?.value)||0;
     if(metric==="big3")return parseInt(m.challenges?.find(c=>c.challenge_id==="big3")?.value)||0;
-    if(metric==="volume")return parseInt(m.challenges?.find(c=>c.challenge_id==="ironscore")?.value)||0; // fallback: XP as proxy
-    if(metric==="workouts")return parseInt(m.challenges?.find(c=>c.challenge_id==="streak")?.value)||0; // best available
+    if(metric==="volume")return parseInt(m.challenges?.find(c=>c.challenge_id==="ironscore")?.value)||0;
+    if(metric==="workouts")return parseInt(m.challenges?.find(c=>c.challenge_id==="streak")?.value)||0;
+    if(metric==="duels")return parseInt(m.challenges?.find(c=>c.challenge_id==="duel_wins")?.value)||0;
     return 0;
   };
 
   const rankColor=(i)=>i===0?"#fbbf24":i===1?"#94a3b8":i===2?"#cd7f32":"rgba(255,255,255,0.12)";
   const rankLabel=(i)=>i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}`;
 
-  // For friends mode: combine server data with local calculations
   const friendRows=useMemo(()=>{
     const rows=[myRow];
     (friends?.friends||[]).forEach(f=>{
       const fStreak=parseInt(f.challenges?.find?.(c=>c.challenge_id==="streak")?.value)||0;
       const fBig3=parseInt(f.challenges?.find?.(c=>c.challenge_id==="big3")?.value)||0;
       const fXP=parseInt(f.challenges?.find?.(c=>c.challenge_id==="ironscore")?.value)||0;
+      const fDuelWins=parseInt(f.challenges?.find?.(c=>c.challenge_id==="duel_wins")?.value)||0;
       rows.push({...f,name:friendDisplayName(f),isMe:false,
-        streak:fStreak,big3:fBig3,weekVol:fXP,weekWorkouts:fStreak});
+        streak:fStreak,big3:fBig3,weekVol:fXP,weekWorkouts:fStreak,duelWins:fDuelWins});
     });
     return rows.sort((a,b)=>{
       if(metric==="streak")return b.streak-a.streak;
       if(metric==="big3")return b.big3-a.big3;
       if(metric==="volume")return b.weekVol-a.weekVol;
       if(metric==="workouts")return b.weekWorkouts-a.weekWorkouts;
+      if(metric==="duels")return b.duelWins-a.duelWins;
       return 0;
     });
-  },[friends,metric,myRow.streak,myRow.big3,myRow.weekVol,myRow.weekWorkouts]);
+  },[friends,metric,myRow.streak,myRow.big3,myRow.weekVol,myRow.weekWorkouts,myRow.duelWins]);
 
-  // For group mode: build sorted member list
   const groupRows=useMemo(()=>{
     const rows=(members?.members||[]).map(m=>({...m,_val:getMemberVal(m)}));
     rows.sort((a,b)=>b._val-a._val);
@@ -14357,9 +14374,68 @@ function SocialLeaderboard({s,d}){
 
   const maxVal=(rows,getVal)=>Math.max(...rows.map(getVal),1);
 
+  const getMyMetricVal=()=>{
+    if(metric==="streak")return myRow.streak;
+    if(metric==="big3")return myRow.big3;
+    if(metric==="volume")return myRow.weekVol;
+    if(metric==="workouts")return myRow.weekWorkouts;
+    if(metric==="duels")return myRow.duelWins;
+    return 0;
+  };
+
+  const fmtVal=(val)=>{
+    if(metric==="volume"&&val>=1000)return`${(val/1000).toFixed(1)}k`;
+    return val;
+  };
+
+  const renderRow=(r,i,rows,getVal)=>{
+    const val=getVal(r);
+    const mv=maxVal(rows,getVal);
+    const isMe=r.isMe||r.email===email;
+    return(
+      <Card key={i} style={{padding:10,
+        border:isMe?`1.5px solid ${V.accent}40`:undefined,
+        background:isMe?`${V.accent}06`:undefined}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:26,height:26,borderRadius:8,background:rankColor(i),
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:i<3?14:11,fontWeight:800,color:i<3?"#000":V.text3,flexShrink:0}}>
+            {rankLabel(i)}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+              <span style={{fontSize:12,fontWeight:isMe?700:500,color:isMe?V.accent:V.text,
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>
+                {r.name||friendDisplayName(r)}{isMe?" (You)":""}
+              </span>
+              <span style={{fontSize:13,fontWeight:800,color:isMe?V.accent:V.text,fontFamily:V.mono}}>
+                {fmtVal(val)} <span style={{fontSize:9,color:V.text3,fontWeight:400}}>{curMetric.unit}</span>
+              </span>
+            </div>
+            <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,0.05)"}}>
+              <div style={{height:"100%",borderRadius:2,
+                background:isMe?V.accent:i===0?"#fbbf24":V.purple,
+                width:`${Math.round(val/mv*100)}%`,transition:"width .4s"}}/>
+            </div>
+          </div>
+          {metric==="duels"&&i===0&&val>0&&(
+            <span style={{fontSize:14,marginLeft:2}}>👑</span>
+          )}
+        </div>
+      </Card>
+    );
+  };
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <div style={{fontSize:16,fontWeight:800,color:V.text}}>Leaderboard</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:16,fontWeight:800,color:V.text}}>Leaderboard</div>
+        {metric==="duels"&&(
+          <div style={{fontSize:9,padding:"3px 8px",borderRadius:6,
+            background:`${V.accent}12`,border:`1px solid ${V.accent}25`,
+            color:V.accent,fontWeight:700}}>⚔️ DUEL KINGS</div>
+        )}
+      </div>
 
       {/* Mode toggle */}
       <div style={{display:"flex",gap:0,borderRadius:10,overflow:"hidden",border:`1px solid ${V.cardBorder}`}}>
@@ -14379,11 +14455,57 @@ function SocialLeaderboard({s,d}){
         ))}
       </div>
 
+      {/* Duel wins context card */}
+      {metric==="duels"&&(
+        <Card style={{padding:12,background:`linear-gradient(135deg,rgba(0,245,160,0.06),rgba(139,92,246,0.06))`,
+          border:`1px solid ${V.accent}20`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:V.text3,marginBottom:2}}>YOUR DUEL RECORD</div>
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:20,fontWeight:900,color:V.accent,fontFamily:V.mono}}>{myDuelRecord.wins||0}</div>
+                  <div style={{fontSize:8,color:V.text3}}>W</div>
+                </div>
+                <div style={{fontSize:12,color:V.text3}}>—</div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:20,fontWeight:900,color:V.danger,fontFamily:V.mono}}>{myDuelRecord.losses||0}</div>
+                  <div style={{fontSize:8,color:V.text3}}>L</div>
+                </div>
+                {(myDuelRecord.ties||0)>0&&(
+                  <>
+                    <div style={{fontSize:12,color:V.text3}}>—</div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:20,fontWeight:900,color:V.warn,fontFamily:V.mono}}>{myDuelRecord.ties}</div>
+                      <div style={{fontSize:8,color:V.text3}}>T</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              {(myDuelRecord.wins+myDuelRecord.losses)>0&&(
+                <div>
+                  <div style={{fontSize:18,fontWeight:900,color:V.text,fontFamily:V.mono}}>
+                    {Math.round((myDuelRecord.wins/(myDuelRecord.wins+myDuelRecord.losses))*100)}%
+                  </div>
+                  <div style={{fontSize:9,color:V.text3}}>win rate</div>
+                </div>
+              )}
+              <button onClick={()=>d({type:"TAB",tab:"social_duels"})}
+                style={{marginTop:6,padding:"4px 10px",borderRadius:7,background:V.accent,border:"none",
+                  cursor:"pointer",fontSize:10,fontWeight:800,color:V.bg,fontFamily:V.font}}>
+                Duel Now →
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* GROUP MODE */}
       {mode==="group"&&(
         groups?.groups?.length>0?(
           <div>
-            {/* Group selector */}
             <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
               {groups.groups.map(g=>(
                 <button key={g.code} onClick={()=>loadMembers(g.code)} style={{padding:"6px 14px",borderRadius:8,
@@ -14404,7 +14526,6 @@ function SocialLeaderboard({s,d}){
 
             {!loading&&groupRows.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {/* Top 3 podium */}
                 {groupRows.length>=2&&(
                   <Card style={{padding:14,marginBottom:4}}>
                     <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:8,height:90}}>
@@ -14419,7 +14540,7 @@ function SocialLeaderboard({s,d}){
                               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{friendDisplayName(m)}</div>
                             <div style={{width:60,height:h,borderRadius:"6px 6px 0 0",
                               background:rankColor(i),display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:4}}>
-                              <span style={{fontSize:10,fontWeight:800,color:i<3?"#000":"#fff",fontFamily:V.mono}}>{val}</span>
+                              <span style={{fontSize:10,fontWeight:800,color:i<3?"#000":"#fff",fontFamily:V.mono}}>{fmtVal(val)}</span>
                             </div>
                           </div>
                         );
@@ -14427,42 +14548,7 @@ function SocialLeaderboard({s,d}){
                     </div>
                   </Card>
                 )}
-
-                {/* Full list */}
-                {groupRows.map((m,i)=>{
-                  const val=m._val;
-                  const mv=maxVal(groupRows,r=>r._val);
-                  const isMe=m.email===email;
-                  return(
-                    <Card key={i} style={{padding:10,
-                      border:isMe?`1.5px solid ${V.accent}40`:undefined,
-                      background:isMe?`${V.accent}06`:undefined}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{width:26,height:26,borderRadius:8,background:rankColor(i),
-                          display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:i<3?14:11,fontWeight:800,color:i<3?"#000":V.text3,flexShrink:0}}>
-                          {rankLabel(i)}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                            <span style={{fontSize:12,fontWeight:isMe?700:500,color:isMe?V.accent:V.text,
-                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>
-                              {friendDisplayName(m)}{isMe?" (You)":""}
-                            </span>
-                            <span style={{fontSize:13,fontWeight:800,color:isMe?V.accent:V.text,fontFamily:V.mono}}>
-                              {val} <span style={{fontSize:9,color:V.text3,fontWeight:400}}>{curMetric.unit}</span>
-                            </span>
-                          </div>
-                          <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,0.05)"}}>
-                            <div style={{height:"100%",borderRadius:2,
-                              background:isMe?V.accent:i===0?"#fbbf24":V.purple,
-                              width:`${Math.round(val/mv*100)}%`,transition:"width .4s"}}/>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
+                {groupRows.map((m,i)=>renderRow(m,i,groupRows,r=>r._val))}
               </div>
             )}
           </div>
@@ -14480,7 +14566,6 @@ function SocialLeaderboard({s,d}){
       {mode==="friends"&&(
         friendRows.length>1?(
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {/* You vs best friend stat */}
             <Card style={{padding:12,background:`linear-gradient(135deg,${V.accent}08,${V.purple}08)`}}>
               <div style={{fontSize:10,fontWeight:700,color:V.text3,marginBottom:6}}>YOUR RANKING</div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -14492,48 +14577,19 @@ function SocialLeaderboard({s,d}){
                   <div style={{fontSize:10,color:V.text3}}>{curMetric.label}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:18,fontWeight:800,color:V.text,fontFamily:V.mono}}>
-                    {metric==="streak"?myRow.streak:metric==="big3"?myRow.big3:metric==="volume"?`${myRow.weekVol>=1000?(myRow.weekVol/1000).toFixed(1)+"k":myRow.weekVol}`:myRow.weekWorkouts}
-                  </div>
+                  <div style={{fontSize:18,fontWeight:800,color:V.text,fontFamily:V.mono}}>{fmtVal(getMyMetricVal())}</div>
                   <div style={{fontSize:9,color:V.text3}}>{curMetric.unit}</div>
                 </div>
               </div>
             </Card>
-
-            {friendRows.map((r,i)=>{
-              const val=metric==="streak"?r.streak:metric==="big3"?r.big3:metric==="volume"?r.weekVol:r.weekWorkouts;
-              const mv=Math.max(...friendRows.map(fr=>metric==="streak"?fr.streak:metric==="big3"?fr.big3:metric==="volume"?fr.weekVol:fr.weekWorkouts),1);
-              const isMe=r.isMe;
-              return(
-                <Card key={i} style={{padding:10,
-                  border:isMe?`1.5px solid ${V.accent}40`:undefined,
-                  background:isMe?`${V.accent}06`:undefined}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:26,height:26,borderRadius:8,background:rankColor(i),
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                      fontSize:i<3?14:11,fontWeight:800,color:i<3?"#000":V.text3,flexShrink:0}}>
-                      {rankLabel(i)}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                        <span style={{fontSize:12,fontWeight:isMe?700:500,color:isMe?V.accent:V.text,
-                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>
-                          {r.name}{isMe?" (You)":""}
-                        </span>
-                        <span style={{fontSize:13,fontWeight:800,color:isMe?V.accent:V.text,fontFamily:V.mono}}>
-                          {val>=1000&&metric==="volume"?`${(val/1000).toFixed(1)}k`:val} <span style={{fontSize:9,color:V.text3,fontWeight:400}}>{curMetric.unit}</span>
-                        </span>
-                      </div>
-                      <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,0.05)"}}>
-                        <div style={{height:"100%",borderRadius:2,
-                          background:isMe?V.accent:i===0?"#fbbf24":V.purple,
-                          width:`${Math.round(val/mv*100)}%`,transition:"width .4s"}}/>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+            {friendRows.map((r,i)=>renderRow(r,i,friendRows,row=>{
+              if(metric==="streak")return row.streak;
+              if(metric==="big3")return row.big3;
+              if(metric==="volume")return row.weekVol;
+              if(metric==="workouts")return row.weekWorkouts;
+              if(metric==="duels")return row.duelWins;
+              return 0;
+            }))}
           </div>
         ):(
           <Card style={{padding:30,textAlign:"center"}}>
@@ -14562,7 +14618,7 @@ function SocialChallenges({s,d}){
   const weeklyChallenges=[
     {name:"3 in 5",desc:"3 workouts in 5 days",check:()=>s.workouts.filter(w=>w.date>=ago(5)).length,total:3},
     {name:"Protein Week",desc:"Hit protein target 4 days",check:()=>protDays,total:4},
-    {name:"Volume King",desc:"5,000 lbs total squat volume this week",check:()=>{let v=0;s.workouts.filter(w=>w.date>=ago(7)).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId==="squat")e.sets.forEach(st=>{v+=st.weight*st.reps;});}));return Math.round(v);},total:5000},
+    {name:"Volume King",desc:"5,000 lbs total squat volume this week",check:()=>{let v=0;s.workouts.filter(w=>w.date>=ago(7)).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId==="squat")e.sets.forEach(st=>{v+=(parseFloat(st.weight)||0)*(parseInt(st.reps)||0);});}));return Math.round(v);},total:5000},
     {name:"Full Logger",desc:"Log workout + meal + check-in today",check:()=>(s.workouts.some(w=>w.date===today())?1:0)+(s.nutrition.some(n=>n.date===today())?1:0)+((s.checkins||[]).some(c=>c.date===today())?1:0),total:3},
   ];
   const weeklyChallenge=weeklyChallenges[weekNum%weeklyChallenges.length];
@@ -15472,7 +15528,7 @@ function IronNotifCheck({s}){
     checkStreakShieldActivation(s); // auto-consume shield if user missed exactly 1 day
     // Enhancement: auto-detect completed war wins so they're never lost
     (()=>{
-      const wIdx=Math.floor((Date.now()-new Date("2026-01-05").getTime())/(7*86400000));
+      const wIdx=Math.floor((Date.now()-WAR_EPOCH)/(7*86400000));
       // Check the previous week's war (Monday to Sunday)
       const prevWeekIdx=wIdx-1;
       const prevClaimedKey=`ft-war-claimed-${prevWeekIdx}`;
@@ -15777,23 +15833,32 @@ function SocialDuels({s,d}){
   const [friends,setFriends]=useState(null);
   const [active,setActive]=useState(LS.get("ft-duels")||[]);
   const [showNew,setShowNew]=useState(false);
+  const [rematchFriend,setRematchFriend]=useState(null); // pre-fill friend on rematch
   const [selFriend,setSelFriend]=useState(null);
-  const [selMetric,setSelMetric]=useState("streak");
+  const [selMetric,setSelMetric]=useState("workouts");
   const [selDays,setSelDays]=useState(7);
+  const [tab,setTab]=useState("active"); // active | history
   const streak=useStreak(s.workouts);
+  const [record,setRecord]=useState(LS.get("ft-duel-record")||{wins:0,losses:0,ties:0});
   const getBest=(id)=>{let b=0;(s.workouts||[]).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId===id)e.sets.forEach(st=>{const w2=parseFloat(st.weight)||0;if(w2>b)b=w2;});}));return b;};
 
   useEffect(()=>{if(email)SocialAPI.getFriends(email).then(r=>{if(r)setFriends(r);});},[email]);
 
+  // Pre-select friend on rematch open
+  useEffect(()=>{
+    if(showNew&&rematchFriend){
+      setSelFriend(rematchFriend);
+    }
+  },[showNew]);
+
   const DUEL_METRICS=[
-    {id:"streak",label:"🔥 Streak",desc:"Who keeps a longer streak during the duel period"},
-    {id:"workouts",label:"💪 Workouts",desc:"Most workouts logged in the time window"},
-    {id:"volume",label:"⚡ Total Volume",desc:"Most lbs moved (weight × reps across all workouts)"},
-    {id:"big3",label:"🏋️ Big 3",desc:"Highest bench + squat + deadlift combined"},
-    {id:"protein",label:"🥗 Protein Days",desc:"Most days hitting protein goal"},
+    {id:"workouts",label:"💪 Workouts",desc:"Most sessions logged in the window",unit:"workouts"},
+    {id:"streak",label:"🔥 Streak",desc:"Who keeps a longer streak during the duel",unit:"days"},
+    {id:"volume",label:"⚡ Total Volume",desc:"Most lbs moved (weight × reps)",unit:"lbs"},
+    {id:"big3",label:"🏋️ Big 3",desc:"Highest bench + squat + deadlift combined",unit:"lbs"},
+    {id:"protein",label:"🥗 Protein Days",desc:"Most days hitting your protein goal",unit:"days"},
   ];
 
-  // B22 fix: use duel's actual startDate when computing live values; fallback to ago(7) for new-duel preview
   const getMyVal=(metric,sinceDate)=>{
     const since=sinceDate||ago(7);
     if(metric==="streak")return streak;
@@ -15804,264 +15869,499 @@ function SocialDuels({s,d}){
     return 0;
   };
 
+  // For absolute metrics (streak, big3): compare current value directly.
+  // For delta metrics (workouts, volume, protein): subtract baseline captured at duel start.
+  const ABSOLUTE_METRICS=["streak","big3"];
+  const getDuelScore=(duel)=>{
+    const raw=getMyVal(duel.metric,duel.startDate);
+    if(ABSOLUTE_METRICS.includes(duel.metric))return raw;
+    return Math.max(0,raw-(duel.myStartVal||0));
+  };
+
+  const saveActive=(updated)=>{setActive(updated);LS.set("ft-duels",updated);};
+
   const createDuel=()=>{
     if(!selFriend)return;
-    const duel={id:uid(),friendEmail:selFriend.email,friendName:friendDisplayName(selFriend),
+    const f=selFriend;
+    const duel={id:uid(),friendEmail:f.email,friendName:friendDisplayName(f),
       metric:selMetric,days:selDays,startDate:today(),
-      endDate:ago(-selDays),status:"active",
-      myVal:getMyVal(selMetric),theirVal:parseInt(selFriend.challenges?.find(c=>c.challenge_id===selMetric)?.value)||0};
-    const updated=[...active,duel];
-    setActive(updated);LS.set("ft-duels",updated);
-    SocialAPI.logEvent(email,"DuelStarted",{to:selFriend.email,metric:selMetric,days:selDays,name:myName},"friends");
-    setShowNew(false);setSelFriend(null);
-    SuccessToastCtrl.show(`Duel started with ${friendDisplayName(selFriend)}!`);
+      endDate:ago(-selDays),status:"active",resultSeen:false,
+      myStartVal:getMyVal(selMetric),theirVal:parseInt(f.challenges?.find(c=>c.challenge_id===selMetric)?.value)||0};
+    saveActive([...active,duel]);
+    try{SocialAPI.logEvent(email,"DuelStarted",{to:f.email,metric:selMetric,days:selDays,name:myName},"friends");}catch(e){}
+    setShowNew(false);setSelFriend(null);setRematchFriend(null);
+    SuccessToastCtrl.show(`⚔️ Duel started with ${friendDisplayName(f)}!`);
   };
 
-  const removeDuel=(id)=>{
-    const updated=active.filter(d=>d.id!==id);
-    setActive(updated);LS.set("ft-duels",updated);
+  const claimResult=(duel,iWon,tied)=>{
+    // Update win/loss record and sync state so W/L bar re-renders immediately
+    const cur=LS.get("ft-duel-record")||{wins:0,losses:0,ties:0};
+    if(iWon)cur.wins=(cur.wins||0)+1;
+    else if(tied)cur.ties=(cur.ties||0)+1;
+    else cur.losses=(cur.losses||0)+1;
+    LS.set("ft-duel-record",cur);
+    setRecord({...cur});
+    // XP for wins
+    if(iWon){addXPBonus(50,"Duel Victory 🏆");SuccessToastCtrl.show("Victory! +50 XP 🏆");}
+    // Snapshot final score so history shows accurate score even after more workouts are logged
+    const finalMyScore=getDuelScore(duel);
+    saveActive(active.map(dd=>dd.id===duel.id?{...dd,resultSeen:true,settled:true,finalMyScore}:dd));
   };
 
-  const metricLabel=(m)=>DUEL_METRICS.find(dm=>dm.id===m)?.label||m;
+  const removeDuel=(id)=>saveActive(active.filter(dd=>dd.id!==id));
+
+  const startRematch=(duel)=>{
+    const f=(friends?.friends||[]).find(ff=>ff.email===duel.friendEmail);
+    setSelFriend(f||{email:duel.friendEmail,name:duel.friendName});
+    setRematchFriend(f||{email:duel.friendEmail,name:duel.friendName});
+    setSelMetric(duel.metric);
+    setSelDays(duel.days||7);
+    setShowNew(true);
+  };
+
+  const metricDef=(m)=>DUEL_METRICS.find(dm=>dm.id===m);
+
+  const now=new Date();
+  const runningDuels=active.filter(dd=>new Date(dd.endDate)>=now);   // still in progress
+  const pendingResults=active.filter(dd=>new Date(dd.endDate)<now&&!dd.resultSeen); // ended, not claimed
+  const historyDuels=active.filter(dd=>new Date(dd.endDate)<now&&dd.resultSeen);   // settled
+  const activeDuels=runningDuels; // alias used by tab label
+  const totalDuels=Math.max(1,(record.wins||0)+(record.losses||0)+(record.ties||0)); // guard /0
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+      {/* ── Header ── */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div style={{fontSize:16,fontWeight:800,color:V.text}}>1v1 Duels</div>
+          <div style={{fontSize:16,fontWeight:800,color:V.text}}>⚔️ 1v1 Duels</div>
           <div style={{fontSize:11,color:V.text3}}>Challenge a friend head-to-head</div>
         </div>
-        <button onClick={()=>setShowNew(true)} style={{padding:"8px 16px",borderRadius:10,
-          background:V.accent,border:"none",cursor:"pointer",fontSize:12,fontWeight:800,
-          color:V.bg,fontFamily:V.font}}>+ Challenge</button>
+        <button onClick={()=>{setRematchFriend(null);setSelFriend(null);setShowNew(true);}}
+          style={{padding:"9px 18px",borderRadius:10,background:V.accent,border:"none",
+            cursor:"pointer",fontSize:12,fontWeight:800,color:V.bg,fontFamily:V.font}}>
+          + Challenge
+        </button>
       </div>
 
-      {/* ── T4 #15: Weekly Wars winner announcement ── */}
-      {(()=>{
-        const endedDuels=active.filter(duel=>{
-          const msLeft=new Date(duel.endDate)-new Date();
-          return msLeft<0&&!duel.resultSeen;
-        });
-        if(endedDuels.length===0)return null;
-        return endedDuels.map(duel=>{
-          const myV=getMyVal(duel.metric,duel.startDate);
-          const theirV=duel.theirVal||0;
-          const iWon=myV>theirV;
-          const tied=myV===theirV;
-          const def=DUEL_METRICS.find(dm=>dm.id===duel.metric);
-          return(
-            <div key={duel.id+"_result"} style={{padding:"14px 16px",borderRadius:14,marginBottom:4,
-              background:iWon?"linear-gradient(135deg,rgba(0,245,160,0.1),rgba(0,245,160,0.03))"
-                :tied?"linear-gradient(135deg,rgba(245,158,11,0.1),rgba(245,158,11,0.03))"
-                :"linear-gradient(135deg,rgba(244,63,94,0.1),rgba(244,63,94,0.03))",
-              border:`1.5px solid ${iWon?V.accent:tied?V.warn:V.danger}30`}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                <span style={{fontSize:28}}>{iWon?"🏆":tied?"🤝":"💀"}</span>
-                <div>
-                  <div style={{fontSize:13,fontWeight:900,color:iWon?V.accent:tied?V.warn:V.danger}}>
-                    {iWon?"You Won!":tied?"It's a Tie":"You Lost"}
-                  </div>
-                  <div style={{fontSize:10,color:V.text3}}>
-                    vs {duel.friendName} · {def?.label||duel.metric}
-                  </div>
+      {/* ── Win/Loss record bar ── */}
+      {((record.wins||0)+(record.losses||0)+(record.ties||0))>0&&(
+        <Card style={{padding:"10px 14px",background:`linear-gradient(135deg,${V.accent}07,${V.purple}07)`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",gap:16,alignItems:"center"}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:900,color:V.accent,fontFamily:V.mono,lineHeight:1}}>{record.wins||0}</div>
+                <div style={{fontSize:8,color:V.text3,fontWeight:700,letterSpacing:".06em"}}>WINS</div>
+              </div>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:900,color:V.danger,fontFamily:V.mono,lineHeight:1}}>{record.losses||0}</div>
+                <div style={{fontSize:8,color:V.text3,fontWeight:700,letterSpacing:".06em"}}>LOSSES</div>
+              </div>
+              {(record.ties||0)>0&&(
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:900,color:V.warn,fontFamily:V.mono,lineHeight:1}}>{record.ties}</div>
+                  <div style={{fontSize:8,color:V.text3,fontWeight:700,letterSpacing:".06em"}}>TIES</div>
                 </div>
-                {iWon&&<div style={{marginLeft:"auto",padding:"3px 10px",borderRadius:20,
-                  background:`${V.accent}15`,border:`1px solid ${V.accent}30`,
-                  fontSize:9,fontWeight:700,color:V.accent}}>+50 XP</div>}
-              </div>
-              <div style={{display:"flex",gap:10,marginBottom:10}}>
-                {[{label:"You",val:myV,color:iWon?V.accent:V.danger},{label:duel.friendName?.split(" ")[0]||"Them",val:theirV,color:iWon?V.danger:V.accent}].map(side=>(
-                  <div key={side.label} style={{flex:1,padding:"7px 10px",borderRadius:8,
-                    background:"rgba(255,255,255,0.03)",textAlign:"center"}}>
-                    <div style={{fontSize:16,fontWeight:800,color:side.color,fontFamily:V.mono}}>{side.val}</div>
-                    <div style={{fontSize:9,color:V.text3}}>{side.label}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>{
-                  if(iWon)addXPBonus(50,"Duel Victory 🏆");
-                  const updated=active.map(d=>d.id===duel.id?{...d,resultSeen:true}:d);
-                  setActive(updated);LS.set("ft-duels",updated);
-                  if(iWon)SuccessToastCtrl.show("Victory! +50 XP 🏆");
-                }} style={{flex:1,padding:"8px",borderRadius:8,cursor:"pointer",
-                  background:iWon?V.accent:V.danger,border:"none",
-                  fontSize:11,fontWeight:800,color:V.bg,fontFamily:V.font}}>
-                  {iWon?"Claim Victory 🏆":"Dismiss"}
-                </button>
-                <button onClick={()=>{
-                  const msg=iWon?`I beat ${duel.friendName} on IRONLOG! ${myV} vs ${theirV} ${def?.label||""} 🏆`:`${duel.friendName} beat me on IRONLOG. Rematch time! ⚔️`;
-                  if(navigator.share)navigator.share({title:"IRONLOG Duel Result",text:msg}).catch(()=>{});
-                  else{navigator.clipboard?.writeText(msg);SuccessToastCtrl.show("Copied!");}
-                }} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",
-                  background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
-                  fontSize:11,color:V.text2,fontFamily:V.font}}>
-                  Share
-                </button>
-              </div>
+              )}
             </div>
-          );
-        });
-      })()}
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:18,fontWeight:900,color:V.text,fontFamily:V.mono}}>
+                {Math.round(((record.wins||0)/totalDuels)*100)}%
+              </div>
+              <div style={{fontSize:9,color:V.text3}}>win rate · {(record.wins||0)+(record.losses||0)+(record.ties||0)} duels</div>
+              {(record.wins||0)>=5&&(
+                <div style={{fontSize:9,color:V.accent,fontWeight:700,marginTop:2}}>👑 Duel King</div>
+              )}
+            </div>
+          </div>
+          {/* win rate bar */}
+          <div style={{marginTop:8,height:4,borderRadius:2,background:"rgba(255,255,255,0.06)"}}>
+            <div style={{height:"100%",borderRadius:2,background:`linear-gradient(90deg,${V.accent},${V.purple})`,
+              width:`${Math.round(((record.wins||0)/totalDuels)*100)}%`,transition:"width .5s"}}/>
+          </div>
+        </Card>
+      )}
 
-      {active.length===0&&!showNew&&(
-        <Card style={{padding:30,textAlign:"center"}}>
-          <div style={{fontSize:36,marginBottom:8}}>⚔️</div>
-          <div style={{fontSize:14,fontWeight:700,color:V.text,marginBottom:6}}>No active duels</div>
-          <div style={{fontSize:12,color:V.text3,marginBottom:16}}>Challenge a friend and see who's really putting in work</div>
-          <button onClick={()=>setShowNew(true)} style={{padding:"10px 28px",borderRadius:12,
-            background:V.accent,border:"none",cursor:"pointer",fontSize:13,fontWeight:800,color:V.bg,fontFamily:V.font}}>
-            Start a Duel
+      {/* ── Pending results (auto-surfaced) ── */}
+      {pendingResults.map(duel=>{
+        const myV=duel.finalMyScore!==undefined?duel.finalMyScore:getDuelScore(duel);
+        const theirV=duel.theirVal||0;
+        const iWon=myV>theirV;
+        const tied=myV===theirV;
+        const def=metricDef(duel.metric);
+        return(
+          <div key={duel.id+"_result"} style={{padding:"14px 16px",borderRadius:16,
+            background:iWon?"linear-gradient(135deg,rgba(0,245,160,0.12),rgba(0,245,160,0.03))"
+              :tied?"linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.03))"
+              :"linear-gradient(135deg,rgba(244,63,94,0.12),rgba(244,63,94,0.03))",
+            border:`1.5px solid ${iWon?V.accent:tied?V.warn:V.danger}35`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{fontSize:32}}>{iWon?"🏆":tied?"🤝":"💀"}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:900,color:iWon?V.accent:tied?V.warn:V.danger}}>
+                  {iWon?"You Won!":tied?"It's a Tie!":"You Lost"}
+                </div>
+                <div style={{fontSize:11,color:V.text3}}>vs {duel.friendName} · {def?.label}</div>
+              </div>
+              {iWon&&<div style={{padding:"4px 10px",borderRadius:20,background:`${V.accent}15`,
+                border:`1px solid ${V.accent}30`,fontSize:10,fontWeight:800,color:V.accent}}>+50 XP</div>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+              {[{label:"You",val:myV,win:iWon||tied},{label:duel.friendName?.split(" ")[0]||"Them",val:theirV,win:!iWon||tied}].map(side=>(
+                <div key={side.label} style={{padding:"10px",borderRadius:10,
+                  background:side.win&&!tied?"rgba(0,245,160,0.06)":"rgba(255,255,255,0.03)",
+                  textAlign:"center",border:`1px solid ${side.win&&!tied?V.accent+"20":"transparent"}`}}>
+                  <div style={{fontSize:22,fontWeight:900,color:side.win?V.accent:V.text3,fontFamily:V.mono}}>{side.val}</div>
+                  <div style={{fontSize:9,color:V.text3}}>{side.label}</div>
+                  <div style={{fontSize:8,color:V.text3}}>{def?.unit}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>claimResult(duel,iWon,tied)}
+                style={{flex:1,padding:"11px",borderRadius:10,cursor:"pointer",
+                  background:iWon?V.accent:tied?V.warn:V.danger,border:"none",
+                  fontSize:12,fontWeight:800,color:V.bg,fontFamily:V.font}}>
+                {iWon?"🏆 Claim Victory":tied?"🤝 Accept Tie":"💀 Accept Loss"}
+              </button>
+              <button onClick={()=>startRematch(duel)}
+                style={{padding:"11px 14px",borderRadius:10,cursor:"pointer",
+                  background:"rgba(255,255,255,0.06)",border:`1px solid ${V.cardBorder}`,
+                  fontSize:12,fontWeight:700,color:V.text2,fontFamily:V.font}}>
+                Rematch ⚔️
+              </button>
+              <button onClick={()=>{
+                  const msg=iWon?`I beat ${duel.friendName} ${myV}–${theirV} on IRONLOG! 🏆`:`Rematch time — ${duel.friendName} got me ${theirV}–${myV} on IRONLOG ⚔️`;
+                  if(navigator.share)navigator.share({title:"IRONLOG Duel",text:msg}).catch(()=>{});
+                  else{navigator.clipboard?.writeText(msg);SuccessToastCtrl.show("Copied!");}
+                }} style={{padding:"11px 12px",borderRadius:10,cursor:"pointer",
+                  background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,
+                  fontSize:12,color:V.text3,fontFamily:V.font}}>
+                Share
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── Tab selector ── */}
+      {(activeDuels.length>0||historyDuels.length>0)&&(
+        <div style={{display:"flex",gap:0,borderRadius:10,overflow:"hidden",border:`1px solid ${V.cardBorder}`}}>
+          {[{id:"active",label:"Active"+(runningDuels.length>0?" ("+runningDuels.length+")":"")},
+            {id:"history",label:"History"+(historyDuels.length>0?" ("+historyDuels.length+")":"")}].map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"9px 0",
+              background:tab===t.id?V.accent:"transparent",border:"none",cursor:"pointer",
+              fontSize:12,fontWeight:700,color:tab===t.id?V.bg:V.text3,fontFamily:V.font,transition:"all .2s"}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Empty state ── */}
+      {active.length===0&&pendingResults.length===0&&(
+        <Card style={{padding:32,textAlign:"center"}}>
+          <div style={{fontSize:44,marginBottom:10}}>⚔️</div>
+          <div style={{fontSize:15,fontWeight:800,color:V.text,marginBottom:6}}>No active duels</div>
+          <div style={{fontSize:12,color:V.text3,marginBottom:18,lineHeight:1.5}}>
+            Challenge a friend and see who's really putting in work. Bragging rights included.
+          </div>
+          <button onClick={()=>setShowNew(true)} style={{padding:"12px 32px",borderRadius:12,
+            background:V.accent,border:"none",cursor:"pointer",fontSize:13,fontWeight:800,
+            color:V.bg,fontFamily:V.font}}>
+            ⚔️ Start a Duel
           </button>
         </Card>
       )}
 
-      {active.map(duel=>{
-        const myV=getMyVal(duel.metric,duel.startDate);
+      {/* ── Active duel cards ── */}
+      {tab==="active"&&runningDuels.length===0&&(
+        <div style={{padding:"18px 0",textAlign:"center"}}>
+          <div style={{fontSize:12,color:V.text3,marginBottom:10}}>No active duels running right now</div>
+          <button onClick={()=>{setRematchFriend(null);setSelFriend(null);setShowNew(true);}}
+            style={{padding:"8px 20px",borderRadius:8,background:V.accent,border:"none",
+              cursor:"pointer",fontSize:12,fontWeight:800,color:V.bg,fontFamily:V.font}}>
+            + New Challenge
+          </button>
+        </div>
+      )}
+      {tab==="active"&&runningDuels.map(duel=>{
+        const myV=getDuelScore(duel);
         const theirV=duel.theirVal||0;
         const winning=myV>theirV;
         const tied=myV===theirV;
         const max=Math.max(myV,theirV,1);
         const msLeft=new Date(duel.endDate)-new Date();
         const daysLeft=Math.max(0,Math.round(msLeft/86400000));
-        const ended=msLeft<0;
-        const def=DUEL_METRICS.find(dm=>dm.id===duel.metric);
+        const hoursLeft=Math.max(0,Math.round(msLeft/3600000));
+        const totalMs=(duel.days||7)*86400000;
+        const progressPct=Math.min(100,Math.round((1-msLeft/totalMs)*100));
+        const def=metricDef(duel.metric);
+        const statusColor=winning?V.accent:tied?"#f59e0b":V.danger;
         return(
-          <Card key={duel.id} style={{padding:14,
-            border:`1px solid ${ended?"rgba(255,255,255,0.08)":winning?"#22c55e":tied?"#f59e0b":"#f43f5e"}25`,
-            opacity:ended?0.75:1}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <div>
-                {ended?(
-                  <span style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:6,
-                    background:"rgba(255,255,255,0.06)",color:V.text3}}>
-                    ⏱️ ENDED · {winning?"You Won":"Opponent Won"}
+          <Card key={duel.id} style={{padding:0,overflow:"hidden",
+            border:`1.5px solid ${statusColor}25`}}>
+            {/* Time progress bar at top */}
+            <div style={{height:3,background:"rgba(255,255,255,0.05)"}}>
+              <div style={{height:"100%",background:`linear-gradient(90deg,${statusColor},${statusColor}80)`,
+                width:`${progressPct}%`,transition:"width .5s"}}/>
+            </div>
+            <div style={{padding:14}}>
+              {/* Status + timer row */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:10,fontWeight:800,padding:"3px 9px",borderRadius:6,letterSpacing:".04em",
+                  background:`${statusColor}15`,color:statusColor}}>
+                  {winning?"🟢 WINNING":tied?"🟡 TIED":"🔴 BEHIND"}
+                </span>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:10,color:V.text3}}>
+                    {daysLeft>0?`${daysLeft}d left`:hoursLeft>0?`${hoursLeft}h left`:"Ending soon"}
                   </span>
-                ):(
-                  <span style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:6,
-                    background:winning?"#22c55e15":tied?"#f59e0b15":"#f43f5e15",
-                    color:winning?"#22c55e":tied?"#f59e0b":"#f43f5e"}}>
-                    {winning?"🟢 WINNING":tied?"🟡 TIED":"🔴 BEHIND"}
-                  </span>
-                )}
+                  <button onClick={()=>removeDuel(duel.id)}
+                    style={{background:"none",border:"none",cursor:"pointer",
+                      fontSize:13,color:V.text3,padding:"2px 4px",opacity:0.5}}>✕</button>
+                </div>
               </div>
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                {!ended&&<span style={{fontSize:9,color:V.text3}}>{daysLeft}d left</span>}
-                <button onClick={()=>removeDuel(duel.id)} style={{background:"none",border:"none",
-                  cursor:"pointer",fontSize:12,color:V.text3,padding:"2px 4px",opacity:0.5}}>✕</button>
+
+              {/* Metric label */}
+              <div style={{fontSize:10,fontWeight:700,color:V.text3,marginBottom:10,
+                display:"flex",alignItems:"center",gap:6}}>
+                <span>{def?.label}</span>
+                <span style={{opacity:0.4}}>·</span>
+                <span>{duel.days}d duel</span>
               </div>
+
+              {/* Score comparison */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10,
+                alignItems:"center",marginBottom:12}}>
+                <div style={{background:winning?`${V.accent}08`:"rgba(255,255,255,0.02)",
+                  borderRadius:10,padding:"10px 12px",border:`1px solid ${winning?V.accent+"20":"transparent"}`}}>
+                  <div style={{fontSize:10,color:V.text3,marginBottom:2}}>You</div>
+                  <div style={{fontSize:28,fontWeight:900,color:winning?V.accent:V.text,fontFamily:V.mono,lineHeight:1}}>{myV}</div>
+                  <div style={{fontSize:8,color:V.text3,marginTop:1}}>{def?.unit}</div>
+                </div>
+                <div style={{fontSize:12,fontWeight:800,color:V.text3}}>vs</div>
+                <div style={{background:!winning&&!tied?`${V.danger}08`:"rgba(255,255,255,0.02)",
+                  borderRadius:10,padding:"10px 12px",textAlign:"right",
+                  border:`1px solid ${!winning&&!tied?V.danger+"20":"transparent"}`}}>
+                  <div style={{fontSize:10,color:V.text3,marginBottom:2}}>{duel.friendName?.split(" ")[0]||"Them"}</div>
+                  <div style={{fontSize:28,fontWeight:900,color:!winning&&!tied?V.danger:V.text,fontFamily:V.mono,lineHeight:1}}>{theirV}</div>
+                  <div style={{fontSize:8,color:V.text3,marginTop:1}}>{def?.unit}</div>
+                </div>
+              </div>
+
+              {/* Dual progress bars */}
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontSize:9,color:V.text3,width:22,flexShrink:0}}>You</div>
+                  <div style={{flex:1,height:7,borderRadius:4,background:"rgba(255,255,255,0.06)",overflow:"hidden"}}>
+                    <div style={{height:"100%",borderRadius:4,
+                      background:`linear-gradient(90deg,${V.accent},${V.accent}90)`,
+                      width:`${Math.round(myV/max*100)}%`,transition:"width .5s"}}/>
+                  </div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontSize:9,color:V.text3,width:22,flexShrink:0,
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {duel.friendName?.split(" ")[0]?.slice(0,4)||"Them"}
+                  </div>
+                  <div style={{flex:1,height:7,borderRadius:4,background:"rgba(255,255,255,0.06)",overflow:"hidden"}}>
+                    <div style={{height:"100%",borderRadius:4,
+                      background:`linear-gradient(90deg,${V.danger},${V.danger}90)`,
+                      width:`${Math.round(theirV/max*100)}%`,transition:"width .5s"}}/>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lead/gap callout */}
+              {myV!==theirV&&(
+                <div style={{marginTop:8,fontSize:10,color:V.text3,textAlign:"center",fontStyle:"italic"}}>
+                  {winning
+                    ?`You're ahead by ${myV-theirV} ${def?.unit||"pts"} — keep it up 🔥`
+                    :`${theirV-myV} ${def?.unit||"pts"} behind — time to grind 💪`}
+                </div>
+              )}
             </div>
-            <div style={{fontSize:11,fontWeight:700,color:V.text3,marginBottom:10}}>{metricLabel(duel.metric)}</div>
-            {/* Side by side comparison */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,alignItems:"center",marginBottom:10}}>
-              <div style={{textAlign:"left"}}>
-                <div style={{fontSize:10,color:V.text3,marginBottom:3}}>You</div>
-                <div style={{fontSize:24,fontWeight:900,color:winning?V.accent:V.text,fontFamily:V.mono}}>{myV}</div>
-              </div>
-              <div style={{fontSize:14,fontWeight:800,color:V.text3}}>vs</div>
-              <div style={{textAlign:"right"}}>
-                <div style={{fontSize:10,color:V.text3,marginBottom:3}}>{duel.friendName}</div>
-                <div style={{fontSize:24,fontWeight:900,color:!winning&&!tied?V.danger:V.text,fontFamily:V.mono}}>{theirV}</div>
-              </div>
-            </div>
-            {/* Progress bars */}
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.06)",overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:3,background:V.accent,
-                  width:`${Math.round(myV/max*100)}%`,transition:"width .4s"}}/>
-              </div>
-              <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.06)",overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:3,background:V.danger,
-                  width:`${Math.round(theirV/max*100)}%`,transition:"width .4s"}}/>
-              </div>
-            </div>
-            {def&&<div style={{fontSize:9,color:V.text3,marginTop:6,fontStyle:"italic"}}>{def.desc}</div>}
           </Card>
         );
       })}
 
-      {/* New duel sheet */}
+      {/* ── History cards ── */}
+      {tab==="history"&&(
+        historyDuels.length===0
+          ?<Card style={{padding:20,textAlign:"center"}}>
+            <div style={{fontSize:12,color:V.text3}}>No completed duels yet</div>
+          </Card>
+          :historyDuels.slice().reverse().map((duel,i)=>{
+            const myV=duel.finalMyScore!==undefined?duel.finalMyScore:getDuelScore(duel);
+            const theirV=duel.theirVal||0;
+            const won=myV>theirV;
+            const tied=myV===theirV;
+            const def=metricDef(duel.metric);
+            return(
+              <Card key={duel.id} style={{padding:12,opacity:0.8,
+                border:`1px solid ${won?V.accent:tied?V.warn:V.danger}18`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:18}}>{won?"🏆":tied?"🤝":"💀"}</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:won?V.accent:tied?V.warn:V.danger}}>
+                        {won?"Won":tied?"Tied":"Lost"} vs {duel.friendName}
+                      </div>
+                      <div style={{fontSize:9,color:V.text3}}>{def?.label} · {duel.days}d</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:13,fontWeight:800,color:V.text,fontFamily:V.mono}}>{myV}–{theirV}</div>
+                    <div style={{fontSize:8,color:V.text3}}>{def?.unit}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>startRematch(duel)}
+                    style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",
+                      background:"rgba(255,255,255,0.04)",border:`1px solid ${V.accent}30`,
+                      fontSize:11,fontWeight:700,color:V.accent,fontFamily:V.font}}>
+                    ⚔️ Rematch
+                  </button>
+                  <button onClick={()=>removeDuel(duel.id)}
+                    style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",
+                      background:"rgba(255,255,255,0.03)",border:`1px solid ${V.cardBorder}`,
+                      fontSize:11,color:V.text3,fontFamily:V.font}}>
+                    Remove
+                  </button>
+                </div>
+              </Card>
+            );
+          })
+      )}
+
+      {/* ── New duel Sheet (using proper Sheet component to fix iOS tap issue) ── */}
       {showNew&&(
-        <div style={{position:"fixed",inset:0,zIndex:90,background:"rgba(0,0,0,0.7)",
-          display:"flex",flexDirection:"column",justifyContent:"flex-end"}}
-          onClick={()=>setShowNew(false)}>
-          <div style={{background:V.bg,borderRadius:"20px 20px 0 0",padding:"16px 20px 36px",
-            maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-            <div style={{width:36,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)",margin:"0 auto 16px"}}/>
-            <div style={{fontSize:16,fontWeight:800,color:V.text,marginBottom:14}}>⚔️ Start a Duel</div>
-
-            <div style={{fontSize:11,fontWeight:700,color:V.text3,marginBottom:8}}>CHOOSE OPPONENT</div>
-            {!friends&&<div style={{fontSize:11,color:V.text3}}>Loading friends...</div>}
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
-              {(friends?.friends||[]).map(f=>(
-                <button key={f.email} onClick={()=>setSelFriend(selFriend?.email===f.email?null:f)}
-                  style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,
-                    border:`1.5px solid ${selFriend?.email===f.email?V.accent:V.cardBorder}`,
-                    background:selFriend?.email===f.email?`${V.accent}10`:"transparent",
-                    cursor:"pointer",textAlign:"left"}}>
-                  <div style={{width:36,height:36,borderRadius:18,overflow:"hidden",flexShrink:0,
-                    background:f.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
-                    display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    {f.avatar?<img src={f.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
-                      :<span style={{fontSize:14,color:"#fff",fontWeight:800}}>{friendDisplayName(f)[0]?.toUpperCase()}</span>}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:700,color:selFriend?.email===f.email?V.accent:V.text}}>{friendDisplayName(f)}</div>
-                    {f.username&&<div style={{fontSize:10,color:V.text3}}>@{f.username}</div>}
-                  </div>
-                  {selFriend?.email===f.email&&<span style={{color:V.accent}}>✓</span>}
-                </button>
-              ))}
-              {(friends?.friends||[]).length===0&&<div style={{fontSize:11,color:V.text3,padding:"12px 0"}}>Add friends first to challenge them</div>}
+        <Sheet title="⚔️ Start a Duel" onClose={()=>{setShowNew(false);setSelFriend(null);setRematchFriend(null);}}
+          footer={
+            <div style={{padding:"12px 20px",paddingBottom:"max(12px,env(safe-area-inset-bottom))"}}>
+              <button onClick={()=>{if(selFriend)createDuel();}}
+                disabled={!selFriend}
+                style={{width:"100%",padding:"15px",borderRadius:12,
+                  background:selFriend?V.accent:"rgba(255,255,255,0.08)",
+                  border:"none",cursor:selFriend?"pointer":"default",
+                  fontSize:15,fontWeight:800,color:selFriend?V.bg:V.text3,
+                  fontFamily:V.font,transition:"all .2s",
+                  opacity:selFriend?1:0.5}}>
+                {selFriend?`⚔️ Challenge ${friendDisplayName(selFriend).split(" ")[0]}`:"Select an opponent first"}
+              </button>
             </div>
-
-            <div style={{fontSize:11,fontWeight:700,color:V.text3,marginBottom:8}}>METRIC</div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
-              {DUEL_METRICS.map(m=>(
-                <button key={m.id} onClick={()=>setSelMetric(m.id)}
-                  style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                    padding:"10px 12px",borderRadius:10,
-                    border:`1.5px solid ${selMetric===m.id?V.accent:V.cardBorder}`,
-                    background:selMetric===m.id?`${V.accent}10`:"transparent",cursor:"pointer"}}>
-                  <div>
-                    <div style={{fontSize:12,fontWeight:700,color:selMetric===m.id?V.accent:V.text,textAlign:"left"}}>{m.label}</div>
-                    <div style={{fontSize:9,color:V.text3,textAlign:"left"}}>{m.desc}</div>
-                  </div>
-                  {selMetric===m.id&&<span style={{color:V.accent}}>✓</span>}
-                </button>
-              ))}
+          }>
+          {/* Opponent */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:V.text3,letterSpacing:".06em",
+              textTransform:"uppercase",marginBottom:10}}>Choose Opponent</div>
+            {!friends&&(
+              <div style={{display:"flex",gap:10,alignItems:"center",padding:"12px 0"}}>
+                <div style={{width:12,height:12,borderRadius:"50%",border:`2px solid ${V.accent}`,
+                  borderTopColor:"transparent",animation:"spin 1s linear infinite"}}/>
+                <span style={{fontSize:12,color:V.text3}}>Loading friends...</span>
+              </div>
+            )}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {(friends?.friends||[]).map(f=>{
+                const sel=selFriend?.email===f.email;
+                return(
+                  <button key={f.email} onClick={()=>setSelFriend(sel?null:f)}
+                    style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
+                      borderRadius:12,width:"100%",textAlign:"left",fontFamily:V.font,
+                      border:`1.5px solid ${sel?V.accent:V.cardBorder}`,
+                      background:sel?`${V.accent}10`:"rgba(255,255,255,0.02)",
+                      cursor:"pointer",transition:"all .15s",WebkitTapHighlightColor:"transparent"}}>
+                    <div style={{width:40,height:40,borderRadius:20,overflow:"hidden",flexShrink:0,
+                      background:f.avatar?"none":`linear-gradient(135deg,${V.purple},#ec4899)`,
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {f.avatar?<img src={f.avatar} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+                        :<span style={{fontSize:15,color:"#fff",fontWeight:800}}>{friendDisplayName(f)[0]?.toUpperCase()}</span>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:sel?V.accent:V.text}}>{friendDisplayName(f)}</div>
+                      {f.username&&<div style={{fontSize:10,color:V.text3}}>@{f.username}</div>}
+                    </div>
+                    <div style={{width:22,height:22,borderRadius:11,
+                      border:`2px solid ${sel?V.accent:V.cardBorder}`,
+                      background:sel?V.accent:"transparent",
+                      display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {sel&&<span style={{color:V.bg,fontSize:12,fontWeight:900}}>✓</span>}
+                    </div>
+                  </button>
+                );
+              })}
+              {friends&&(friends?.friends||[]).length===0&&(
+                <Card style={{padding:20,textAlign:"center"}}>
+                  <div style={{fontSize:12,color:V.text3,marginBottom:10}}>Add friends first to challenge them</div>
+                  <Btn onClick={()=>{setShowNew(false);d({type:"TAB",tab:"social_friends"});}}>Add Friends</Btn>
+                </Card>
+              )}
             </div>
-
-            <div style={{fontSize:11,fontWeight:700,color:V.text3,marginBottom:8}}>DURATION</div>
-            <div style={{display:"flex",gap:8,marginBottom:20}}>
-              {[3,7,14,30].map(d=>(
-                <button key={d} onClick={()=>setSelDays(d)}
-                  style={{flex:1,padding:"10px 0",borderRadius:10,
-                    border:`1.5px solid ${selDays===d?V.accent:V.cardBorder}`,
-                    background:selDays===d?`${V.accent}10`:"transparent",
-                    cursor:"pointer",fontSize:12,fontWeight:700,
-                    color:selDays===d?V.accent:V.text3,fontFamily:V.font}}>
-                  {d}d
-                </button>
-              ))}
-            </div>
-
-            <button onClick={createDuel} disabled={!selFriend}
-              style={{width:"100%",padding:"14px",borderRadius:12,
-                background:selFriend?V.accent:"rgba(255,255,255,0.08)",
-                border:"none",cursor:selFriend?"pointer":"default",
-                fontSize:14,fontWeight:800,color:selFriend?V.bg:V.text3,fontFamily:V.font,
-                transition:"all .2s"}}>
-              ⚔️ Start Duel
-            </button>
           </div>
-        </div>
+
+          {/* Metric */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:V.text3,letterSpacing:".06em",
+              textTransform:"uppercase",marginBottom:10}}>Metric</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {DUEL_METRICS.map(m=>{
+                const myPreview=getMyVal(m.id);
+                const sel=selMetric===m.id;
+                return(
+                  <button key={m.id} onClick={()=>setSelMetric(m.id)}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"12px 14px",borderRadius:12,width:"100%",
+                      border:`1.5px solid ${sel?V.accent:V.cardBorder}`,
+                      background:sel?`${V.accent}10`:"rgba(255,255,255,0.02)",
+                      cursor:"pointer",fontFamily:V.font,WebkitTapHighlightColor:"transparent"}}>
+                    <div style={{textAlign:"left"}}>
+                      <div style={{fontSize:13,fontWeight:700,color:sel?V.accent:V.text}}>{m.label}</div>
+                      <div style={{fontSize:10,color:V.text3,marginTop:1}}>{m.desc}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0,marginLeft:10}}>
+                      <div style={{fontSize:15,fontWeight:900,color:sel?V.accent:V.text2,fontFamily:V.mono}}>{myPreview}</div>
+                      <div style={{fontSize:8,color:V.text3}}>your {m.unit}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Duration */}
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:11,fontWeight:700,color:V.text3,letterSpacing:".06em",
+              textTransform:"uppercase",marginBottom:10}}>Duration</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+              {[3,7,14,30].map(dd=>{
+                const sel=selDays===dd;
+                return(
+                  <button key={dd} onClick={()=>setSelDays(dd)}
+                    style={{padding:"12px 0",borderRadius:10,
+                      border:`1.5px solid ${sel?V.accent:V.cardBorder}`,
+                      background:sel?`${V.accent}10`:"transparent",
+                      cursor:"pointer",fontSize:13,fontWeight:700,
+                      color:sel?V.accent:V.text3,fontFamily:V.font,
+                      WebkitTapHighlightColor:"transparent"}}>
+                    {dd}d
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{fontSize:10,color:V.text3,marginTop:8,textAlign:"center"}}>
+              Ends {new Date(Date.now()+selDays*86400000).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+            </div>
+          </div>
+        </Sheet>
       )}
     </div>
   );
 }
 
 // ─── Competitive: Weekly Wars (group challenge) ───
+const WAR_EPOCH=new Date("2026-01-05").getTime(); // Monday week-0 anchor — change only on season reset
 function SocialWeeklyWar({s,d}){
   const streak=useStreak(s.workouts);
   const getBest=(id)=>{let b=0;(s.workouts||[]).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId===id)e.sets.forEach(st=>{const w2=parseFloat(st.weight)||0;if(w2>b)b=w2;});}));return b;};
@@ -16078,7 +16378,7 @@ function SocialWeeklyWar({s,d}){
   const weekProteinDays=s.nutrition.filter(n=>n.date>=weekStart&&(n.protein||0)>=(s.goals?.protein||150)).length;
 
   // War challenges — 5 rotating weekly battles
-  const weekIdx=Math.floor((Date.now()-new Date("2026-01-05").getTime())/(7*86400000));
+  const weekIdx=Math.floor((Date.now()-WAR_EPOCH)/(7*86400000));
   const ALL_WARS=[
     {id:"workouts",name:"Most Workouts",desc:"Log as many sessions as possible",icon:"💪",
       myVal:weekWorkouts,target:5,unit:"workouts"},
@@ -16120,7 +16420,7 @@ function SocialWeeklyWar({s,d}){
     if(winClaimed)return;
     const newWins=(LS.get("ft-war-wins")||0)+1;
     const lastWin=LS.get("ft-last-war-win");
-    const prevWeekIdx=lastWin?Math.floor((Date.now()-new Date("2026-01-05").getTime())/(7*86400000))-1:null;
+    const prevWeekIdx=lastWin?Math.floor((Date.now()-WAR_EPOCH)/(7*86400000))-1:null;
     const newStreak=lastWin&&prevWeekIdx===weekIdx-1?(LS.get("ft-war-streak")||0)+1:1;
     LS.set("ft-war-wins",newWins);LS.set("ft-war-streak",newStreak);
     LS.set("ft-last-war-win",weekStart);LS.set(claimedKey,true);
@@ -17715,6 +18015,7 @@ function AdminBusinessValue({s}){
     {id:"retention",icon:"📈",label:"Retention"},
     {id:"social",icon:"🤝",label:"Social"},
     {id:"leaderboard",icon:"🏆",label:"Leaders"},
+    {id:"geo",icon:"📍",label:"Geo & Goals"},
   ];
 
   const COLORS=[V.accent,V.accent2,V.warn,"#22c55e","#f43f5e",V.purple,"#06b6d4","#f97316","#84cc16","#e879f9"];
@@ -18235,6 +18536,184 @@ function AdminBusinessValue({s}){
                 </div>
               ));
             })()}
+          </Card>
+        </div>
+      )}
+
+      {/* ══ GEO & GOALS TAB ══ */}
+      {tab==="geo"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+          {/* Primary goal distribution — the most strategic insight */}
+          <Card style={{padding:14,background:`linear-gradient(135deg,${V.accent}07,${V.purple}07)`}}>
+            <SectionTitle color={V.accent}>Primary Goal Distribution</SectionTitle>
+            <div style={{fontSize:10,color:V.text3,marginBottom:10}}>What members said they're training for at signup</div>
+            {(d.goalDist||[]).length===0&&(
+              <div style={{fontSize:11,color:V.text3,textAlign:"center",padding:"16px 0"}}>
+                No goal data yet — populates as v11+ users sign up
+              </div>
+            )}
+            {(d.goalDist||[]).map((row,i)=>{
+              const max=Math.max(0,...(d.goalDist||[]).map(r=>r.value));
+              const GOAL_COLORS={"Build Muscle":V.accent,"Lose Fat":"#f43f5e","Body Recomposition":V.purple,"Strength":"#f59e0b","Maintain Fitness":"#22c55e","Not set":V.text3};
+              const GOAL_ICONS={"Build Muscle":"💪","Lose Fat":"🔥","Body Recomposition":"⚡","Strength":"🏋️","Maintain Fitness":"🧘","Not set":"—"};
+              const color=GOAL_COLORS[row.name]||COLORS[i%COLORS.length];
+              return(
+                <div key={row.name} style={{marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{fontSize:14}}>{GOAL_ICONS[row.name]||"🎯"}</span>
+                      <span style={{fontSize:12,fontWeight:700,color}}>{row.name}</span>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{fontSize:11,fontWeight:800,color,fontFamily:V.mono}}>{row.value}</span>
+                      <span style={{fontSize:9,color:V.text3,fontWeight:400}}>({row.pct}%)</span>
+                    </div>
+                  </div>
+                  <div style={{height:8,borderRadius:4,background:"rgba(255,255,255,0.05)"}}>
+                    <div style={{height:"100%",borderRadius:4,
+                      background:`linear-gradient(90deg,${color},${color}90)`,
+                      width:`${max>0?row.value/max*100:0}%`,transition:"width .4s"}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+
+          {/* Goal × retention cross-tab */}
+          <Card style={{padding:14}}>
+            <SectionTitle color="#22c55e">Goal Cohort Performance (30d)</SectionTitle>
+            <div style={{fontSize:10,color:V.text3,marginBottom:10}}>How each goal segment actually trains — avg workouts & 30-day retention</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(d.goalActivity||[]).filter(g=>g.goal!=="Not set").length===0&&(
+                <div style={{fontSize:11,color:V.text3,textAlign:"center",padding:"16px 0"}}>
+                  No goal cohort data yet — populates as v11+ users sign up and sync
+                </div>
+              )}
+              {(d.goalActivity||[]).filter(g=>g.goal!=="Not set").map((row,i)=>{
+                const GOAL_COLORS={"Build Muscle":V.accent,"Lose Fat":"#f43f5e","Body Recomposition":V.purple,"Strength":"#f59e0b","Maintain Fitness":"#22c55e"};
+                const color=GOAL_COLORS[row.goal]||COLORS[i%COLORS.length];
+                const retColor=row.retentionPct30d>=30?"#22c55e":row.retentionPct30d>=15?"#f59e0b":"#f43f5e";
+                return(
+                  <div key={row.goal} style={{padding:"10px 12px",borderRadius:10,
+                    background:"rgba(255,255,255,0.02)",border:`1px solid ${color}18`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:12,fontWeight:700,color}}>{row.goal}</span>
+                      <span style={{fontSize:9,color:V.text3}}>{row.count} members</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      <div style={{textAlign:"center",padding:"6px",borderRadius:8,background:"rgba(255,255,255,0.03)"}}>
+                        <div style={{fontSize:18,fontWeight:900,color,fontFamily:V.mono}}>{row.avgWorkouts30d}</div>
+                        <div style={{fontSize:8,color:V.text3}}>avg workouts / 30d</div>
+                      </div>
+                      <div style={{textAlign:"center",padding:"6px",borderRadius:8,background:"rgba(255,255,255,0.03)"}}>
+                        <div style={{fontSize:18,fontWeight:900,color:retColor,fontFamily:V.mono}}>{row.retentionPct30d}%</div>
+                        <div style={{fontSize:8,color:V.text3}}>30-day retention</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          {/* Geographic distribution */}
+          <Card style={{padding:14}}>
+            <SectionTitle color={V.warn}>Top Cities</SectionTitle>
+            <div style={{fontSize:10,color:V.text3,marginBottom:10}}>Where your members are based</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {(d.topCities||[]).map((city,i)=>{
+                const max=(d.topCities||[])[0]?.value||1;
+                return(
+                  <div key={city.name} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:10,fontWeight:700,color:V.text3,fontFamily:V.mono,width:16,flexShrink:0}}>{i+1}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                        <span style={{fontSize:11,color:V.text,fontWeight:i<3?700:400,
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"70%"}}>{city.name}</span>
+                        <span style={{fontSize:11,fontWeight:700,color:COLORS[i%COLORS.length],fontFamily:V.mono,flexShrink:0}}>{city.value}</span>
+                      </div>
+                      <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.05)"}}>
+                        <div style={{height:"100%",borderRadius:2,
+                          background:COLORS[i%COLORS.length],
+                          width:`${city.value/max*100}%`,transition:"width .4s"}}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {(d.topCities||[]).length===0&&(
+                <div style={{fontSize:11,color:V.text3,textAlign:"center",padding:"12px 0"}}>
+                  No city data yet — will populate as users with city on record sync
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* State distribution — moved from fitness tab, shown here in context */}
+          <Card style={{padding:14}}>
+            <SectionTitle color="#06b6d4">Top States</SectionTitle>
+            {(d.topStates||[]).length===0&&(
+              <div style={{fontSize:11,color:V.text3,textAlign:"center",padding:"12px 0"}}>No state data yet</div>
+            )}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+              {(d.topStates||[]).map((st,i)=>{
+                const max=(d.topStates||[])[0]?.value||1;
+                return(
+                  <div key={st.name} style={{padding:"8px 10px",borderRadius:8,
+                    background:"rgba(255,255,255,0.02)",border:`1px solid ${COLORS[i%COLORS.length]}18`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <span style={{fontSize:11,fontWeight:700,color:V.text2}}>{st.name}</span>
+                      <span style={{fontSize:13,fontWeight:800,color:COLORS[i%COLORS.length],fontFamily:V.mono}}>{st.value}</span>
+                    </div>
+                    <div style={{height:3,borderRadius:2,background:"rgba(255,255,255,0.05)"}}>
+                      <div style={{height:"100%",borderRadius:2,background:COLORS[i%COLORS.length],
+                        width:`${st.value/max*100}%`}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          {/* Zip prefix clustering */}
+          {(d.topZipAreas||[]).length>0&&(
+            <Card style={{padding:14}}>
+              <SectionTitle color={V.accent2}>Top Postal Areas</SectionTitle>
+              <div style={{fontSize:10,color:V.text3,marginBottom:10}}>Grouped by first 3 zip digits (postal sector) — shows regional density</div>
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                {(d.topZipAreas||[]).map((area,i)=>{
+                  const max=(d.topZipAreas||[])[0]?.count||1;
+                  return(
+                    <div key={area.prefix} style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:11,fontWeight:800,color:V.accent,fontFamily:V.mono,width:32,flexShrink:0}}>{area.prefix}xx</span>
+                      <div style={{flex:1}}>
+                        <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.05)"}}>
+                          <div style={{height:"100%",borderRadius:3,
+                            background:`linear-gradient(90deg,${COLORS[i%COLORS.length]},${COLORS[i%COLORS.length]}80)`,
+                            width:`${area.count/max*100}%`,transition:"width .4s"}}/>
+                        </div>
+                      </div>
+                      <span style={{fontSize:11,fontWeight:700,color:V.text,fontFamily:V.mono,width:24,textAlign:"right",flexShrink:0}}>{area.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {/* Business intelligence callout */}
+          <Card style={{padding:12,background:`linear-gradient(135deg,rgba(0,245,160,0.04),rgba(139,92,246,0.04))`,
+            border:`1px solid ${V.accent}18`}}>
+            <div style={{fontSize:10,fontWeight:700,color:V.text,marginBottom:6}}>💡 Geographic Intelligence</div>
+            <div style={{fontSize:9,color:V.text3,lineHeight:1.7}}>
+              {(d.topCities||[]).length>0
+                ?`Your largest market is ${(d.topCities||[])[0]?.name} with ${(d.topCities||[])[0]?.value} members. `
+                :"City data will appear here once members with city records sync. "}
+              {(d.goalDist||[]).length>0&&(d.goalDist||[])[0]?.name!=="Not set"
+                ?`Your primary user intent is "${(d.goalDist||[])[0]?.name}" (${(d.goalDist||[])[0]?.pct}%) — lean into this in your marketing and feature prioritisation.`
+                :""}
+            </div>
           </Card>
         </div>
       )}
