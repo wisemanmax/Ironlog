@@ -15644,7 +15644,7 @@ function AdminPush({s,d}){
         setHistory(updated);LS.set("ft-admin-push-history",updated);
         setResult({ok:true,msg:`Sent to ${json.sent} device${json.sent!==1?"s":""} · ${json.failed||0} failed`});
         setBody("");
-      }else setResult({ok:false,msg:json.error||"Failed"});
+      }else setResult({ok:false,msg:res.status===401?"Unauthorized — ensure your account has admin privileges in the database":res.status===403?"Forbidden":json.error||"Failed"});
     }catch(e){setResult({ok:false,msg:e.message});}
     setSending(false);
   };
@@ -16291,9 +16291,17 @@ function AdminUserAudit({s}){
 // ─── Admin XP & Rank Manager ───
 function AdminXPManager({s}){
   const email=s.profile?.email;
-  const token=LS.get("ft-session-token");
-  const headers={"Content-Type":"application/json","X-Session-Token":token};
-  const af=async(action,extra={})=>{try{const r=await fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers,body:JSON.stringify({action,...extra})});return r.ok?await r.json():null;}catch(e){return null;}};
+  // Read token fresh on every call so stale closure never causes 401
+  const af=async(action,extra={})=>{
+    const token=LS.get("ft-session-token");
+    const headers={"Content-Type":"application/json","X-Session-Token":token};
+    try{
+      const r=await fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers,body:JSON.stringify({action,...extra})});
+      const json=await r.json().catch(()=>({}));
+      if(!r.ok)return{__error:json.error||`HTTP ${r.status}`};
+      return json;
+    }catch(e){return{__error:e.message};}
+  };
 
   const [users,setUsers]=useState(null);
   const [usersLoading,setUsersLoading]=useState(false);
@@ -16335,10 +16343,9 @@ function AdminXPManager({s}){
     const res=await af("adjust_xp",{email:selUser.email,amount:amt,reason:xpReason.trim()||"Admin adjustment"});
     if(res?.success){
       setXpResult({ok:true,msg:`Done. New bonus XP total: ${(res.new_total||0).toLocaleString()}`});
-      // Refresh gamification data
       af("get_gamification",{email:selUser.email}).then(r=>{if(r?.gamification)setGData(d=>({...d,g:r.gamification}));});
       setXpAmount("");setXpReason("");
-    }else setXpResult({ok:false,msg:"Failed"});
+    }else setXpResult({ok:false,msg:res?.__error||"Failed — check session"});
     setXpSaving(false);
   };
 
@@ -16363,7 +16370,7 @@ function AdminXPManager({s}){
       // Update last_known_level via adjust (already set in gamification upsert above via adjust_xp)
       setRankResult({ok:true,msg:`${selUser.name||selUser.email.split("@")[0]} is now ${rank.icon} ${rank.name}`});
       af("get_gamification",{email:selUser.email}).then(r=>{if(r?.gamification)setGData(d=>({...d,g:r.gamification}));});
-    }else setRankResult({ok:false,msg:"Failed"});
+    }else setRankResult({ok:false,msg:res?.__error||"Failed — check session"});
     setRankSaving(false);
   };
 
@@ -16568,18 +16575,30 @@ function AdminXPManager({s}){
 // ─── Admin Business Value Dashboard ───
 function AdminBusinessValue({s}){
   const email=s.profile?.email;
-  const token=LS.get("ft-session-token");
-  const hdr={"Content-Type":"application/json","X-Session-Token":token};
-  const af=async(action,extra={})=>{try{const r=await fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers:hdr,body:JSON.stringify({action,...extra})});return r.ok?await r.json():null;}catch(e){return null;}};
+  const af=async(action,extra={})=>{
+    const token=LS.get("ft-session-token");
+    const hdr={"Content-Type":"application/json","X-Session-Token":token};
+    try{
+      const r=await fetch(`${SYNC_URL}/api/admin`,{method:"POST",headers:hdr,body:JSON.stringify({action,...extra})});
+      const json=await r.json().catch(()=>({}));
+      if(!r.ok)return{__error:json.error||`HTTP ${r.status}`};
+      return json;
+    }catch(e){return{__error:e.message};}
+  };
 
   const [data,setData]=useState(null);
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState("overview");
   const [lastRefresh,setLastRefresh]=useState(null);
 
+  const [loadError,setLoadError]=useState(null);
   const load=()=>{
-    setLoading(true);
-    af("business_analytics").then(r=>{setData(r);setLoading(false);setLastRefresh(new Date());});
+    setLoading(true);setLoadError(null);
+    af("business_analytics").then(r=>{
+      if(r?.__error){setLoadError(r.__error);setData(null);}
+      else setData(r);
+      setLoading(false);setLastRefresh(new Date());
+    });
   };
   useEffect(()=>{load();},[]);
 
@@ -16627,6 +16646,15 @@ function AdminBusinessValue({s}){
     </div>
   );
 
+  if(!loading&&loadError)return(
+    <div style={{padding:20,textAlign:"center"}}>
+      <div style={{fontSize:32,marginBottom:8}}>⚠️</div>
+      <div style={{fontSize:14,fontWeight:700,color:V.danger,marginBottom:6}}>Failed to Load Analytics</div>
+      <div style={{fontSize:11,color:V.text3,marginBottom:16,fontFamily:V.mono}}>{loadError}</div>
+      <button onClick={load} style={{padding:"8px 20px",borderRadius:10,background:V.accent,border:"none",
+        cursor:"pointer",fontSize:12,fontWeight:700,color:V.bg,fontFamily:V.font}}>Retry</button>
+    </div>
+  );
   if(!data)return(
     <div style={{textAlign:"center",padding:40}}>
       <div style={{fontSize:32,marginBottom:8}}>⚠️</div>
@@ -17171,7 +17199,6 @@ function AdminHub({s,d}){
       <Section icon="⚡" label="XP & Ranks" desc="View stats, adjust XP, and override ranks for any user" color="#f59e0b" tab="admin_xp"/>
       <Section icon="📈" label="Business Value" desc="Analytics, retention, engagement & growth insights" color="#22c55e" tab="admin_biz"/>
       <Section icon="🔎" label="User Audit" desc="Full read-only view of any user's data — every tab they see" color="#a78bfa" tab="admin_audit"/>
-      <Section icon="💼" label="Business Value" desc="Growth, retention, engagement & revenue intelligence" color="#10b981" tab="admin_business"/>
     </div>
   );
 }
@@ -18072,7 +18099,6 @@ function App(){
         {s.tab==="admin_xp"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminXPManager s={s}/></div>}
         {s.tab==="admin_biz"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminBusinessValue s={s}/></div>}
         {s.tab==="admin_audit"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminUserAudit s={s}/></div>}
-        {s.tab==="admin_business"&&isAdmin&&<div><SubBack to="admin" label="Admin"/><AdminBusinessValue s={s}/></div>}
 
         {s.tab==="admin"&&isAdmin&&<AdminHub s={s} d={d}/>}
 
