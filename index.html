@@ -1614,6 +1614,7 @@ function reducer(s,a){
     // #E4: Preserve a11y on CLEAR_ALL — large text/high contrast/reduce motion were silently lost on data reset
     case "CLEAR_ALL": return{...init,exercises:defaultExercises,loaded:true,onboarded:true,units:s.units,profile:s.profile,a11y:s.a11y};
     case "IMPORT": return{...s,...a.data,loaded:true};
+    case "XP_REFRESH": return{...s,_xpTs:Date.now()}; // nudge re-render so IronScore reads fresh LS
     default: return s;
   }
 }
@@ -7902,6 +7903,8 @@ function AdminPanel({s,initialView}){
   const [dmUserB,setDmUserB]=useState("");
   const [selGroupCode,setSelGroupCode]=useState("");
   const [enlargedPhoto,setEnlargedPhoto]=useState(null);
+  const [banResult,setBanResult]=useState(null);
+  const [banWorking,setBanWorking]=useState(false);
   const token=LS.get("ft-session-token");
   const headers={"Content-Type":"application/json","X-Session-Token":token};
   const af=async(action,extra={})=>{
@@ -7916,7 +7919,16 @@ function AdminPanel({s,initialView}){
   },[]);
 
   const loadUsers=()=>{setLoading(true);af("users").then(r=>{setUsers(r?.users||[]);setLoading(false);});};
-  const loadDetail=(email)=>{setLoading(true);setSelUser(email);af("user_detail",{email}).then(r=>{setUserData(r);setLoading(false);setView("detail");});};
+  const loadDetail=(email)=>{setLoading(true);setSelUser(email);setBanResult(null);af("user_detail",{email}).then(r=>{setUserData(r);setLoading(false);setView("detail");});};
+  const banUser=async(email,ban)=>{
+    setBanWorking(true);setBanResult(null);
+    const r=await af("ban_user",{email,ban});
+    if(r?.success){
+      setBanResult({ok:true,msg:ban?"User banned — all sessions revoked":"User unbanned successfully"});
+      setUserData(d=>({...d,profile:{...d.profile,is_banned:ban}}));
+    }else setBanResult({ok:false,msg:"Failed — check admin session"});
+    setBanWorking(false);
+  };
   const loadHealth=()=>{af("health").then(setHealth);};
   const loadGroups=()=>{af("groups").then(r=>setGroups(r?.groups||[]));};
   const loadDMs=()=>{if(!dmUserA||!dmUserB)return;af("view_dms",{user_a:dmUserA,user_b:dmUserB}).then(setDmData);};
@@ -7997,6 +8009,22 @@ function AdminPanel({s,initialView}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:8,fontSize:9,color:V.text3}}>
           <div>Level: {userData.profile?.fitness_level||"—"}</div><div>Units: {userData.profile?.units||"lbs"}</div>
           <div>PIN: {userData.profile?.account_pin?"Set":"None"}</div><div>Created: {userData.profile?.created_at?.slice(0,10)}</div>
+        </div>
+        <div style={{marginTop:10,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {userData.profile?.is_banned?(
+            <button onClick={()=>banUser(selUser,false)} disabled={banWorking}
+              style={{padding:"7px 16px",borderRadius:8,background:V.accent+"15",border:`1px solid ${V.accent}40`,
+                cursor:"pointer",fontSize:11,fontWeight:700,color:V.accent,fontFamily:V.font}}>
+              {banWorking?"Working…":"✓ Unban User"}
+            </button>
+          ):(
+            <button onClick={()=>{if(window.confirm(`Ban ${selUser}?\nThis revokes all active sessions.`))banUser(selUser,true);}} disabled={banWorking}
+              style={{padding:"7px 16px",borderRadius:8,background:V.danger+"15",border:`1px solid ${V.danger}40`,
+                cursor:"pointer",fontSize:11,fontWeight:700,color:V.danger,fontFamily:V.font}}>
+              {banWorking?"Working…":"🚫 Ban User"}
+            </button>
+          )}
+          {banResult&&<span style={{fontSize:10,fontWeight:600,color:banResult.ok?V.accent:V.danger}}>{banResult.msg}</span>}
         </div>
       </Card>
 
@@ -15317,7 +15345,7 @@ function HelpModal({topic,onClose}){
           </div>
         </div>
         {/* Scrollable content */}
-        <div style={{overflowY:"auto",padding:"14px 20px 32px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{overflowY:"auto",flex:1,minHeight:0,padding:"14px 20px 0",WebkitOverflowScrolling:"touch"}}>
           {t.sections.map((sec,i)=>(
             <div key={i} style={{marginBottom:i<t.sections.length-1?14:0}}>
               <div style={{display:"flex",gap:12,padding:"12px 14px",borderRadius:12,
@@ -15332,6 +15360,22 @@ function HelpModal({topic,onClose}){
               </div>
             </div>
           ))}
+          {/* Bottom padding so last section clears the button */}
+          <div style={{height:14}}/>
+        </div>
+        {/* Sticky "Got it" footer — always visible, closes modal */}
+        <div style={{flexShrink:0,padding:"12px 20px",
+          paddingBottom:`max(20px, calc(env(safe-area-inset-bottom) + 12px))`,
+          borderTop:`1px solid ${V.cardBorder}`,
+          background:V.card}}>
+          <button onClick={onClose}
+            style={{width:"100%",padding:"13px",borderRadius:12,
+              background:`linear-gradient(135deg,${t.color},${t.color}cc)`,
+              border:"none",cursor:"pointer",
+              fontSize:14,fontWeight:800,color:V.bg,fontFamily:V.font,
+              letterSpacing:".02em"}}>
+            Got it
+          </button>
         </div>
       </div>
     </div>
@@ -19272,6 +19316,34 @@ function App(){
       setUnreadMsgCount(totalUnread);
       // Also refresh server notification count
       SocialAPI.getNotifications(email).then(r=>{if(r)setSocialNotifCount(r.unread||0);});
+      // ── Gamification live-refresh: admin XP/rank changes propagate within 15s ──
+      (async()=>{
+        try{
+          const localBonus=LS.get("ft-xp-bonus")||{total:0,log:[]};
+          const token=LS.get("ft-session-token");
+          if(!token)return;
+          const r=await fetch(`${SYNC_URL}/api/sync/gamification`,{
+            method:"POST",
+            headers:{"Content-Type":"application/json","X-Session-Token":token},
+            body:JSON.stringify({client_total:localBonus.total||0}),
+          });
+          if(!r.ok)return;
+          const gj=await r.json();
+          if(!gj.updated)return;
+          // Server has a different xp_bonus — apply it
+          const prev=localBonus.total||0;
+          LS.set("ft-xp-bonus",gj.xp_bonus);
+          if(gj.last_known_level!=null)LS.set("ft-last-known-level",gj.last_known_level);
+          // Toast the user so they know XP changed
+          const diff=(gj.xp_bonus?.total||0)-prev;
+          if(diff!==0){
+            const msg=diff>0?`⚡ +${diff.toLocaleString()} XP added to your account`:`⚡ XP updated by admin`;
+            SuccessToastCtrl.show(msg);
+          }
+          // Force lightweight re-render so IronScore / rank badge update immediately
+          d({type:"XP_REFRESH"});
+        }catch(e){}
+      })();
     };
     // Initial poll after 3s
     const initTimer=setTimeout(poll,3000);
