@@ -18647,8 +18647,7 @@ function AdminBusinessValue({s}){
   const exportCSV=(filename,rows)=>{
     if(!rows||!rows.length)return;
     const keys=Object.keys(rows[0]);
-    const csv=[keys.join(","),...rows.map(r=>keys.map(k=>JSON.stringify(r[k]??"")||""  ).join(","))].join("
-");
+    const csv=[keys.join(","),...rows.map(r=>keys.map(k=>JSON.stringify(r[k]??"")||"").join(","))].join(String.fromCharCode(10));
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download=filename+".csv";a.click();
   };
   const exportJSON=(filename,data2)=>{
