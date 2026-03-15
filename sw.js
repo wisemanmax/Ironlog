@@ -1,6 +1,6 @@
 // ═══ IRONLOG Service Worker v5.0 ═══
 // Phase 5: Offline fallback, background sync, push hardening, cache tuning
-var SW_VERSION = 'ironlog-v7.0';
+var SW_VERSION = 'ironlog-v7.1';
 var CACHE_NAME = SW_VERSION;
 var OFFLINE_PAGE = './offline.html';
 var APP_FILES = ['./', './index.html', './icon.svg', './manifest.json', OFFLINE_PAGE];
@@ -47,7 +47,8 @@ self.addEventListener('fetch', function(e) {
 
   // #5: CDN/Library assets — cache first with max-age
   if (url.indexOf('cdnjs.cloudflare.com') !== -1 || url.indexOf('fonts.googleapis.com') !== -1 ||
-      url.indexOf('fonts.gstatic.com') !== -1 || url.indexOf('unpkg.com') !== -1) {
+      url.indexOf('fonts.gstatic.com') !== -1 || url.indexOf('unpkg.com') !== -1 ||
+      url.indexOf('cdn.jsdelivr.net') !== -1 || url.indexOf('browser.sentry-cdn.com') !== -1) {
     e.respondWith(
       caches.match(e.request).then(function(cr) {
         if (cr) {
@@ -63,7 +64,9 @@ self.addEventListener('fetch', function(e) {
             caches.open(CACHE_NAME).then(function(c) { c.put(e.request, rc); });
           }
           return nr;
-        }).catch(function() { return cr; });
+        }).catch(function() {
+          return cr || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        });
       })
     );
     return;
@@ -78,7 +81,10 @@ self.addEventListener('fetch', function(e) {
           caches.open(CACHE_NAME).then(function(c) { c.put(e.request, rc); });
         }
         return nr;
-      }).catch(function() { return cr; });
+      }).catch(function() {
+        // Return cached response if available, otherwise a proper 503 so respondWith doesn't get undefined
+        return cr || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+      });
       return cr || fn;
     })
   );

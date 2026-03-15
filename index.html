@@ -405,7 +405,7 @@ class AppErrorBoundary extends React.Component{
             border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
           Reload App
         </button>
-        {process?.env?.NODE_ENV==="development"&&(
+        {location.hostname==="localhost"&&(
           <pre style={{marginTop:20,fontSize:9,color:"#52525b",maxWidth:320,overflow:"auto",whiteSpace:"pre-wrap"}}>
             {this.state.err?.toString()}</pre>
         )}
@@ -545,7 +545,7 @@ const ReconcileAPI = {
 };
 
 const APP_VERSION="9.0";
-const SW_VERSION="ironlog-v6.0"; // Keep in sync with sw.js
+const SW_VERSION="ironlog-v7.1"; // Keep in sync with sw.js
 
 // ─── Social API Client ───
 const SocialAPI={
@@ -4890,14 +4890,15 @@ function BodyTab({s,d}){
   const [showMeasurements,setShowMeasurements]=useState(false);
 
   const save=()=>{
-    d({type:"ADD_B",b:{id:uid(),date:form.date,
+    const entry={id:uid(),date:form.date,
       weight:parseFloat(form.weight)||0,bf:parseFloat(form.bf)||0,
       waist:parseFloat(form.waist)||0,hips:parseFloat(form.hips)||0,
       chest:parseFloat(form.chest)||0,neck:parseFloat(form.neck)||0,
       arms:parseFloat(form.arms)||0,thighs:parseFloat(form.thighs)||0,
-      calves:parseFloat(form.calves)||0}});
+      calves:parseFloat(form.calves)||0};
+    d({type:"ADD_B",b:entry});
     Haptic.medium();SuccessToastCtrl.show("Logged ✓");
-    setTimeout(()=>checkAndAwardMissions({...s,body:[b,...s.body]},d),400);
+    setTimeout(()=>checkAndAwardMissions({...s,body:[entry,...s.body]},d),400);
     setShow(false);
     const lastPhotoDate=s.photos[0]?.date;
     const daysSincePhoto=lastPhotoDate?Math.round((Date.now()-new Date(lastPhotoDate+"T12:00:00"))/86400000):99;
@@ -20554,7 +20555,7 @@ function App(){
   // Handle manifest shortcut deep links (hash routing)
   useEffect(()=>{
     const hash=window.location.hash.replace("#","");
-    if(hash&&["log_workout","log_nutrition","log_body","plan_coach","track_readiness","plan_goals"].includes(hash)){
+    if(hash&&["log_workout","log_nutrition","log_body","track_coach","plan_coach","track_readiness","plan_goals"].includes(hash)){
       d({type:"TAB",tab:hash});
       window.location.hash="";
     }
@@ -20686,6 +20687,14 @@ function App(){
       CloudSync.push(s);
     }
   },[s.loaded,s.onboarded]);
+
+  // Wire up background sync callback so SW BACKGROUND_SYNC message triggers a real push
+  useEffect(()=>{
+    if(s.loaded&&s.onboarded&&s.profile?.email){
+      window.__ironlog_sync=()=>CloudSync.push(s);
+      return()=>{window.__ironlog_sync=null;};
+    }
+  },[s.loaded,s.onboarded,s.workouts,s.nutrition,s.body]);
 
   // Listen for service worker update
   const [updateAvailable,setUpdateAvailable]=useState(false);
@@ -21113,7 +21122,7 @@ function App(){
                 if('serviceWorker' in navigator){
                   navigator.serviceWorker.getRegistration().then(reg=>{if(reg)reg.update();});
                 }
-                window.location.reload(true);
+                window.location.reload();
               }} s={{background:V.warn}}>Update Now</Btn>
             </div>
 

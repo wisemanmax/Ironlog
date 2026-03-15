@@ -28,7 +28,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npx serve ./public -l 8080 -s', // -s for SPA fallback
+    command: 'npx serve .. -l 8080 -s', // -s for SPA fallback; serve parent (repo root)
     port: 8080,
     reuseExistingServer: true,
   },
