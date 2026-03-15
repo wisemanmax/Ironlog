@@ -1737,11 +1737,11 @@ function UndoToast({d}){
   },[item,remaining>0]);
   if(!item)return null;
   const doUndo=()=>{
-    const u=Undo.get();if(!u)return;
-    if(u.type==="workout")d({type:"ADD_W",w:u.item});
-    else if(u.type==="nutrition")d({type:"ADD_N",n:u.item});
-    else if(u.type==="body")d({type:"ADD_B",b:u.item});
-    else if(u.type==="photo")d({type:"ADD_PHOTO",photo:u.item});
+    if(!item)return;
+    if(item.type==="workout")d({type:"ADD_W",w:item.item});
+    else if(item.type==="nutrition")d({type:"ADD_N",n:item.item});
+    else if(item.type==="body")d({type:"ADD_B",b:item.item});
+    else if(item.type==="photo")d({type:"ADD_PHOTO",photo:item.item});
     Undo.clear();setItem(null);
     SuccessToastCtrl.show("Restored");
   };
@@ -3954,7 +3954,7 @@ function WorkoutTab({s,d}){
       }
       const displayXP=30+prBonus+consistencyBonus+Math.max(0,multBonus);
       const xpMsg=mult.mult>1?`+${displayXP} XP ${mult.icon} (${mult.mult}\u00d7 bonus!)`:
-        detected.length>0?`+${30+prBonus+consistencyBonus} XP \u00b7 ${detected.length} PR${detected.length>1?"s":""}! \U0001f3af`:consistencyBonus>0?`+${30+consistencyBonus} XP \u00b7 consistency bonus! 🔄`:`+30 XP \U0001f4aa`;
+        detected.length>0?`+${30+prBonus+consistencyBonus} XP \u00b7 ${detected.length} PR${detected.length>1?"s":""}! \u{1f3af}`:consistencyBonus>0?`+${30+consistencyBonus} XP \u00b7 consistency bonus! 🔄`:`+30 XP \u{1f4aa}`;
       SuccessToastCtrl.show("Workout logged · "+xpMsg);
       // Wire early bird mission flag (before 8am)
       if(new Date().getHours()<8)LS.set("ft-workout-early-"+today(),true);
@@ -4376,6 +4376,7 @@ function NutritionTab({s,d}){
     meals:[{name:"Breakfast",items:[]},{name:"Lunch",items:[]},{name:"Dinner",items:[]},{name:"Snacks",items:[]}]});
   const [activeMeal,setActiveMeal]=useState(null);
   const [scanMeal,setScanMeal]=useState(null);
+  const nutritionStreak=useNutritionStreak(s.nutrition);
   const [valWarnings,setValWarnings]=useState(null);
   const [favName,setFavName]=useState("");
   const [showFavInput,setShowFavInput]=useState(false);
@@ -4482,7 +4483,7 @@ function NutritionTab({s,d}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:11,fontWeight:700,color:V.text}}>Today</span>
-            {(()=>{const ns=useNutritionStreak(s.nutrition);return ns>0?<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:"rgba(251,191,36,0.12)",color:"#fbbf24"}}>🥗 {ns}d streak</span>:null;})()}
+            {nutritionStreak>0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:"rgba(251,191,36,0.12)",color:"#fbbf24"}}>🥗 {nutritionStreak}d streak</span>}
           </div>
           {/* #3: Deficit/surplus indicator — vs TDEE if set, else vs goal */}
           {tCal>0?(()=>{
