@@ -44,9 +44,15 @@ export function Onboarding({d}){
     "Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont",
     "Virginia","Washington","West Virginia","Wisconsin","Wyoming","Other"];
 
+  const fetchWithTimeout=(url,opts,ms=10000)=>{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),ms);
+    return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(timer));
+  };
+
   const sendToBackend=async(payload)=>{
     try{
-      const res=await fetch(`${SYNC_URL}/api/users`,{
+      const res=await fetchWithTimeout(`${SYNC_URL}/api/users`,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(payload),
@@ -67,6 +73,7 @@ export function Onboarding({d}){
     setPinError("");
     setSending(true);
 
+    try{
     // Store account PIN locally
     LS.set("ft-account-pin",accountPin);
 
@@ -101,11 +108,13 @@ export function Onboarding({d}){
     await SessionManager.create(profile.email,accountPin,payload.deviceId);
     // Send email verification code then show verify screen
     try{
-      await fetch(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json"},
+      await fetchWithTimeout(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({action:"send_verify_code",email:profile.email})});
     }catch(e){}
+    }finally{
     setVerifyStep("pending");
     setSending(false);
+    }
     // Note: ONBOARDED is dispatched after email verified (or skipped via skip)
   };
 

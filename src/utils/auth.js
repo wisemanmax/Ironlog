@@ -22,10 +22,14 @@ export const SessionManager={
   // Create session after signup (called with email + PIN)
   create:async(email,pin,deviceId)=>{
     try{
+      const ctrl=new AbortController();
+      const timer=setTimeout(()=>ctrl.abort(),10000);
       const res=await fetch(`${SYNC_URL}/api/auth/session`,{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({action:"create",email:email.toLowerCase(),pin,deviceId:deviceId||LS.get("ft-device-id")})
+        body:JSON.stringify({action:"create",email:email.toLowerCase(),pin,deviceId:deviceId||LS.get("ft-device-id")}),
+        signal:ctrl.signal
       });
+      clearTimeout(timer);
       const json=await res.json();
       if(json.success&&json.token){
         LS.set("ft-session-token",json.token);
