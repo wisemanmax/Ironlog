@@ -20,6 +20,14 @@ html, body, #root {
   bottom: 0;
 }
 
+@media (min-width: 768px) {
+  html, body, #root {
+    position: static;
+    overflow: auto;
+    height: 100vh;
+  }
+}
+
 @supports (-webkit-touch-callout: none) {
   html, body, #root {
     height: -webkit-fill-available;
@@ -76,6 +84,11 @@ input[type=number] {
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
+}
+
+@media (min-width: 768px) {
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); }
 }
 
 /* ─── Loader ─── */
@@ -136,7 +149,7 @@ input[type=number] {
   font-family: 'Outfit', sans-serif;
 }
 
-@media (orientation: landscape) and (max-height: 500px) {
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1024px) {
   #root {
     display: none !important;
   }

@@ -5,6 +5,7 @@ import { LS } from '../utils/storage';
 import { Icons } from './Icons';
 import { Undo } from '../utils/undo';
 import { isCardio, wUnit } from '../utils/helpers';
+import { useLayout } from '../utils/responsive';
 
 // ─── #2 Confirm Dialog ───
 function ConfirmDialog({msg,detail,onConfirm,onCancel}){
@@ -370,30 +371,47 @@ const Progress = ({val,max,color=V.accent,h=6}) => (
 
 // Sheet — portalled to document.body so iOS position:fixed works correctly
 // (position:fixed inside -webkit-overflow-scrolling:touch is broken on iOS Safari)
-const Sheet = ({title,onClose,children,footer}) => ReactDOM.createPortal(
-  <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9990,background:V.sheetBg,
-    display:"flex",flexDirection:"column"}}
-    role="dialog" aria-modal="true" aria-label={title}>
-    {/* Header */}
-    <div className="sheet-head" style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,
-      paddingLeft:16,paddingRight:16,paddingBottom:12,borderBottom:`1px solid ${V.cardBorder}`,background:V.sheetBg,zIndex:2}}>
-      <button onClick={onClose} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",
-        cursor:"pointer",padding:"8px 4px",WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-        {Icons.chevLeft({size:20,color:V.accent})}
-        <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span>
-      </button>
-      <h3 style={{margin:0,fontSize:16,color:V.text,fontFamily:V.font,fontWeight:700,flex:1,textAlign:"center",paddingRight:50}}>{title}</h3>
+// On desktop: renders as a centered modal with backdrop
+const Sheet = ({title,onClose,children,footer}) => {
+  const { isDesktop } = useLayout();
+  return ReactDOM.createPortal(
+  <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9990,
+    background:isDesktop?"rgba(0,0,0,0.6)":V.sheetBg,
+    display:"flex",flexDirection:"column",
+    ...(isDesktop?{alignItems:"center",justifyContent:"center",backdropFilter:"blur(8px)"}:{}),
+  }}
+    role="dialog" aria-modal="true" aria-label={title}
+    {...(isDesktop?{onClick:(e)=>{if(e.target===e.currentTarget)onClose();}}:{})}>
+    <div style={{
+      display:"flex",flexDirection:"column",
+      ...(isDesktop?{maxWidth:700,width:"100%",maxHeight:"85vh",borderRadius:20,overflow:"hidden",
+        background:V.sheetBg,border:`1px solid ${V.cardBorder}`,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}:
+        {flex:1}),
+    }}>
+      {/* Header */}
+      <div className="sheet-head" style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,
+        paddingLeft:16,paddingRight:16,paddingBottom:12,borderBottom:`1px solid ${V.cardBorder}`,background:V.sheetBg,zIndex:2,
+        ...(isDesktop?{paddingTop:16}:{}),
+      }}>
+        <button onClick={onClose} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",
+          cursor:"pointer",padding:"8px 4px",WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+          {Icons.chevLeft({size:20,color:V.accent})}
+          <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span>
+        </button>
+        <h3 style={{margin:0,fontSize:16,color:V.text,fontFamily:V.font,fontWeight:700,flex:1,textAlign:"center",paddingRight:50}}>{title}</h3>
+      </div>
+      {/* Scrollable content — flex:1 + minHeight:0 is the correct flex scroll pattern */}
+      <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",
+        overscrollBehavior:"contain",padding:20}}>
+        {children}
+      </div>
+      {/* Footer — part of the flex column, never overlaps content */}
+      {footer&&<div className="sheet-footer" style={{background:V.sheetBg}}>{footer}</div>}
     </div>
-    {/* Scrollable content — flex:1 + minHeight:0 is the correct flex scroll pattern */}
-    <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",
-      overscrollBehavior:"contain",padding:20}}>
-      {children}
-    </div>
-    {/* Footer — part of the flex column, never overlaps content */}
-    {footer&&<div className="sheet-footer" style={{background:V.sheetBg}}>{footer}</div>}
   </div>,
   document.body
 );
+};
 
 const Chip = ({label,active,onClick,color}) => (
   <button onClick={onClick} style={{padding:"7px 14px",borderRadius:20,border:"none",fontSize:12,fontWeight:600,

@@ -3,6 +3,7 @@ import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 import { V, Haptic } from '../utils/theme';
 import { LS } from '../utils/storage';
 import { Icons } from '../components/Icons';
+import { useLayout } from '../utils/responsive';
 import { Card, Btn, Field, Sheet, Chip, Progress, Stat, ValidationWarning, validateBody, SuccessToastCtrl, ConfirmCtrl } from '../components/ui';
 import { today, ago, fmtShort, fmtFull, uid, wUnit, convW, toKg, toLbs, chartCfg } from '../utils/helpers';
 import { Undo } from '../utils/undo';
@@ -19,6 +20,7 @@ export function parseHeightToM(h){
 }
 
 export function BodyTab({s,d}){
+  const { isDesktop } = useLayout();
   const [show,setShow]=useState(false);
   const emptyForm={date:today(),weight:"",bf:"",waist:"",hips:"",chest:"",neck:"",arms:"",thighs:"",calves:""};
   const [form,setForm]=useState(emptyForm);
@@ -54,7 +56,7 @@ export function BodyTab({s,d}){
   ,[s.body,s.range]);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?700:"100%",margin:isDesktop?"0 auto":0}}>
       <div style={{display:"flex",gap:8}}>
         <Btn full onClick={()=>{setForm({...emptyForm,date:today()});setShowMeasurements(false);setShow(true);}}>
           {Icons.plus({size:16,color:V.bg})} Log Today

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { V, Haptic } from '../utils/theme';
 import { LS } from '../utils/storage';
 import { Icons } from '../components/Icons';
+import { useLayout } from '../utils/responsive';
 import { Card, Btn, Field, Sheet, Chip, Progress, Stat, ValidationWarning, validateNutrition, SuccessToastCtrl, ConfirmCtrl } from '../components/ui';
 import { today, ago, fmtShort, fmtFull, uid, wUnit, chartCfg } from '../utils/helpers';
 import { Undo } from '../utils/undo';
@@ -12,6 +13,7 @@ import { ShareCard } from '../utils/share';
 import { checkAndAwardMissions } from './gamification';
 
 export function NutritionTab({s,d}){
+  const { isDesktop } = useLayout();
   const [show,setShow]=useState(false);
   const [form,setForm]=useState({date:today(),cal:"",protein:"",carbs:"",fat:"",fiber:"",water:"",sleep:"",
     meals:[{name:"Breakfast",items:[]},{name:"Lunch",items:[]},{name:"Dinner",items:[]},{name:"Snacks",items:[]}]});
@@ -117,7 +119,7 @@ export function NutritionTab({s,d}){
   const calPct=Math.min(100,Math.round(tCal/calGoal*100)),protPct=Math.min(100,Math.round(tProt/protGoal*100));
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?700:"100%",margin:isDesktop?"0 auto":0}}>
       {/* Daily summary bar — enhanced */}
       <Card style={{padding:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>

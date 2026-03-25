@@ -8,6 +8,7 @@ import { Card, Btn, Field, Sheet, Chip, Stat, Progress, Skeleton, SkeletonCard, 
 import { today, ago, fmtShort, fmtFull, uid, calc1RM, calcPlates, PLATES, convW, wUnit, dUnit, isCardio, toKg, toLbs, friendDisplayName, chartCfg } from '../utils/helpers';
 import { CloudSync, SocialAPI, SYNC_URL, APP_VERSION } from '../utils/sync';
 import { Undo } from '../utils/undo';
+import { useLayout } from '../utils/responsive';
 import { ShareCard } from '../utils/share';
 import { BADGE_DEFS, calcEarnedBadges } from '../data/badges';
 import { TEMPLATES } from '../data/templates';
@@ -17,6 +18,7 @@ import { AuthToken } from '../utils/auth';
 import { calcReadiness, useStreak, usePRs, useNutritionStreak } from '../components/dialogs';
 
 export function OneRMCalc({units}){
+  const { isDesktop } = useLayout();
   const [w,setW]=useState("");
   const [r,setR]=useState("");
   const e1rm=w&&r?calc1RM(parseFloat(w),parseInt(r)):0;
@@ -82,6 +84,7 @@ export function compressImage(file,maxDim=800,quality=0.7){
 }
 
 export function ProgressPhotos({s,d}){
+  const { isDesktop } = useLayout();
   const fileRef=useRef(null);
   const [compressing,setCompressing]=useState(false);
   const [vaultLocked,setVaultLocked]=useState(true);
@@ -432,6 +435,7 @@ export function ProfileEditor({s,d}){
 
 // ─── Admin Panel (only accessible with is_admin=true on server) ───
 export function AdminPanel({s,initialView}){
+  const { isDesktop } = useLayout();
   const [view,setView]=useState(initialView||"dashboard");
   const [dash,setDash]=useState(null);
   const [users,setUsers]=useState([]);
@@ -1412,6 +1416,7 @@ export const MUSCLE_LABELS={chest:"Chest",back:"Back",front_delts:"Front Delts",
 // ─── Progressive Overload Engine (Enhanced) ───
 
 export function GoalEngine({s,d}){
+  const { isDesktop } = useLayout();
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({type:"weight",target:"",deadline:"",label:""});
 
@@ -1581,6 +1586,7 @@ export function GoalEngine({s,d}){
 
 // ─── #1 Adaptive Program Builder ───
 export function AdaptiveCoach({s}){
+  const { isDesktop } = useLayout();
   const r=useMemo(()=>calcReadiness(s),[s.workouts,s.nutrition,s.checkins,s.goals]);
   const dow=new Date().getDay();
   const todayType=s.schedule?.overrides?.[today()]||s.schedule?.weekly?.[dow]||"Rest";
@@ -1900,6 +1906,7 @@ export function WorkoutCard({workout,s}){
 
 // ─── #6 Form Check Workflow ───
 export function FormCheckTab({s,d}){
+  const { isDesktop } = useLayout();
   const [selEx,setSelEx]=useState(null);
   const [recording,setRecording]=useState(false);
   const [videoUrl,setVideoUrl]=useState(null);
@@ -2092,6 +2099,7 @@ export function useDataGuard(s){
 }
 
 export function DataGuardTab({s,d}){
+  const { isDesktop } = useLayout();
   const warnings=useDataGuard(s);
   const sevColor={high:V.danger,med:V.warn,low:V.text3};
   const sevLabel={high:"Critical",med:"Warning",low:"Info"};
@@ -2138,6 +2146,7 @@ export function DataGuardTab({s,d}){
 
 // ─── #2 Phase/Cycle Tracking ───
 export function PhaseTracker({s,d}){
+  const { isDesktop } = useLayout();
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({type:"cut",start:today(),end:"",notes:""});
   const phases=s.phases||[];
@@ -2303,6 +2312,7 @@ export const EXERCISE_SUBS={
 };
 
 export function SubstitutionFinder({s}){
+  const { isDesktop } = useLayout();
   const [selEx,setSelEx]=useState(null);
   const subs=selEx?EXERCISE_SUBS[selEx]||[]:[];
   // Also suggest same-category exercises
@@ -2380,6 +2390,7 @@ export const JOINT_MAP={
 };
 
 export function InjuryManager({s,d}){
+  const { isDesktop } = useLayout();
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({joint:"",severity:"moderate",notes:""});
   const injuries=s.injuries||[];
@@ -2508,6 +2519,7 @@ export function InjuryManager({s,d}){
 
 // ─── #6 Coach Summary Report ───
 export function WeeklySummary({s}){
+  const { isDesktop } = useLayout();
   const canvasRef=useRef(null);
   const [generated,setGenerated]=useState(false);
 
@@ -2679,6 +2691,7 @@ export const FF_BRANDS={
 };
 
 export function FastFoodHacks({s,d}){
+  const { isDesktop } = useLayout();
   const [search,setSearch]=useState("");
   const [brand,setBrand]=useState("All");
   const [sort,setSort]=useState("cal"); // cal, protein, name
@@ -2811,6 +2824,7 @@ export function FastFoodHacks({s,d}){
 
 // ─── Meal Plan Generator ───
 export function MealPlanGenerator({s}){
+  const { isDesktop } = useLayout();
   const [plan,setPlan]=useState(null);
   const goals=s.goals||{cal:2400,protein:180,carbs:250,fat:70};
   // Categorize foods by meal type
@@ -2905,6 +2919,7 @@ export const PROGRAMS=[
 ];
 
 export function ProgramMarketplace({s,d}){
+  const { isDesktop } = useLayout();
   const [sel,setSel]=useState(null);
   const apply=(prog)=>{
     const weekly={};
@@ -2962,6 +2977,7 @@ export function ProgramMarketplace({s,d}){
 export const DEFAULT_SUPPS=["Creatine (5g)","Protein Shake","Multivitamin","Fish Oil","Vitamin D","Pre-Workout","Magnesium","Zinc"];
 
 export function SupplementTracker({s,d}){
+  const { isDesktop } = useLayout();
   const [supps,setSupps]=useState(()=>{ const raw=LS.get("ft-supplements"); return Array.isArray(raw)?raw:DEFAULT_SUPPS.slice(0,4); });
   const [checked,setChecked]=useState(LS.get(`ft-supps-${today()}`)||{});
   const [newSupp,setNewSupp]=useState("");
@@ -3029,6 +3045,7 @@ export function SupplementTracker({s,d}){
 // ─── Photo Comparison Slider ───
 // ─── Personal Records Page ───
 export function PersonalRecords({s}){
+  const { isDesktop } = useLayout();
   const prs=useMemo(()=>{
     const map={};
     s.workouts.forEach(w=>w.exercises.forEach(ex=>{
@@ -3132,6 +3149,7 @@ export function PersonalRecords({s}){
 }
 
 export function PhotoCompare({s}){
+  const { isDesktop } = useLayout();
   const photos=(s.photos||[]).filter(p=>!p.private&&p.data).sort((a,b)=>a.date.localeCompare(b.date));
   const [leftIdx,setLeftIdx]=useState(0);
   const [rightIdx,setRightIdx]=useState(Math.max(0,photos.length-1));
@@ -3213,6 +3231,7 @@ export function PhotoCompare({s}){
 
 // ─── AI Coach Chat (Claude API — BYOK + Free Tier) ───
 export function AICoachChat({s}){
+  const { isDesktop } = useLayout();
   const [userKey,setUserKey]=useState(null);
   const [keyLoaded,setKeyLoaded]=useState(false);
   // Load API key from encrypted storage on mount
