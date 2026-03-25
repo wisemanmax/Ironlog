@@ -8,9 +8,11 @@ import { today, ago, fmtShort, fmtFull, uid } from '../utils/helpers';
 import { SocialAPI, SYNC_URL, APP_VERSION } from '../utils/sync';
 import { AuthToken } from '../utils/auth';
 import { IRON_RANKS } from '../data/ranks';
+import { useLayout } from '../utils/responsive';
 import { BADGE_DEFS } from '../data/badges';
 
 function AdminPush({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
 
   // ── Shared user list (loaded once, used by both push + in-app sections) ──
@@ -2961,6 +2963,7 @@ function AdminBusinessValue({s}){
 }
 
 function AdminHub({s,d}){
+  const { isDesktop } = useLayout();
   const Section=({icon,label,desc,color,tab})=>(
     <Card style={{padding:14,cursor:"pointer"}} onClick={()=>d({type:"TAB",tab})}>
       <div style={{display:"flex",alignItems:"center",gap:12}}>

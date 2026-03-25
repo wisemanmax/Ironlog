@@ -8,6 +8,7 @@ import { today, ago, fmtShort, uid, friendDisplayName, convW, wUnit, calc1RM } f
 import { SocialAPI, SYNC_URL } from '../utils/sync';
 import { AuthToken } from '../utils/auth';
 import { IRON_RANKS, WAR_EPOCH } from '../data/ranks';
+import { useLayout } from '../utils/responsive';
 import { BADGE_DEFS, calcEarnedBadges } from '../data/badges';
 import { ShareCard } from '../utils/share';
 import { getActiveMultiplier, calcIronScore, getShields, useLevelUp, checkStreakShieldAward, checkStreakShieldActivation } from './social';
@@ -609,6 +610,7 @@ export function IronNotifCheck({s}){
 // ── Updated SocialIronScore page ──
 
 export function SocialIronScore({s,d}){
+  const { isDesktop } = useLayout();
   const {xp,baseXP,bonusXP,rank,nextRank,xpIntoRank,xpForNext,pct,streak,big3}=useMemo(()=>calcIronScore(s),[s.workouts,s.nutrition,s.photos,s.checkins,s.body]);
   const {checks}=useMemo(()=>calcEarnedBadges(s),[s.workouts,s.nutrition,s.photos,s.checkins,s.body]);
   const badgeCount=Object.values(checks).filter(Boolean).length;
@@ -848,6 +850,7 @@ export function SocialIronScore({s,d}){
 // ─── Competitive: 1v1 Duels ───
 
 export function SocialDuels({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const myName=s.profile?.firstName?`${s.profile.firstName} ${s.profile.lastName||""}`.trim():"You";
   const [friends,setFriends]=useState(null);
@@ -1383,6 +1386,7 @@ export function SocialDuels({s,d}){
 // ─── Competitive: Weekly Wars (group challenge) ───
 
 export function SocialWeeklyWar({s,d}){
+  const { isDesktop } = useLayout();
   const streak=useStreak(s.workouts);
   const getBest=(id)=>{let b=0;(s.workouts||[]).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId===id)e.sets.forEach(st=>{const w2=parseFloat(st.weight)||0;if(w2>b)b=w2;});}));return b;};
   const now=new Date();
@@ -1565,6 +1569,7 @@ export function SocialWeeklyWar({s,d}){
 // ─── Competitive: Rivalries ───
 
 export function SocialRivals({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const [friends,setFriends]=useState(null);
   const [rivals,setRivals]=useState(LS.get("ft-rivals")||[]);

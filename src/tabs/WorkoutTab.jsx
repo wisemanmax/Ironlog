@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { V, Haptic } from '../utils/theme';
 import { LS } from '../utils/storage';
 import { Icons } from '../components/Icons';
+import { useLayout } from '../utils/responsive';
 import { Card, Btn, Field, Sheet, Chip, Progress, ExercisePicker, ValidationWarning, validateWorkout, SuccessToastCtrl, ConfirmDialog } from '../components/ui';
 import { today, ago, fmtShort, fmtFull, uid, calc1RM, calcPlates, PLATES, fmtTimer, convW, wUnit, dUnit, isCardio, toKg, toLbs } from '../utils/helpers';
 import { Undo } from '../utils/undo';
@@ -22,6 +23,7 @@ function YTBtn({yt,size=24}){
 }
 
 export function WorkoutTab({s,d}){
+  const { isDesktop } = useLayout();
   const [show,setShow]=useState(false);
   const [form,setForm]=useState({date:today(),dur:"",exercises:[],notes:"",rating:3});
   const [selEx,setSelEx]=useState("");
@@ -327,7 +329,7 @@ export function WorkoutTab({s,d}){
   }
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?700:"100%",margin:isDesktop?"0 auto":0}}>
       <div style={{display:"flex",gap:8}}>
         <Btn full onClick={startNew}>{Icons.plus({size:16,color:V.bg})} New Workout</Btn>
         {s.workouts.length>0&&(()=>{

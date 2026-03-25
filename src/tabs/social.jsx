@@ -8,6 +8,7 @@ import { today, ago, fmtShort, fmtFull, uid, friendDisplayName, convW, wUnit, ca
 import { SocialAPI, SYNC_URL } from '../utils/sync';
 import { ShareCard } from '../utils/share';
 import { BADGE_DEFS, calcEarnedBadges } from '../data/badges';
+import { useLayout } from '../utils/responsive';
 import { IRON_RANKS } from '../data/ranks';
 import { HelpBtn } from './features';
 import { IronScoreCard, RankBadge, DailyMissionsCard } from './gamification';
@@ -15,6 +16,7 @@ import { useStreak, calcReadiness } from '../components/dialogs';
 import { SectionGrid } from './hubs';
 
 export function SocialTab({s,d,unreadMsgCount=0}){
+  const { isDesktop } = useLayout();
   // Quick stats for display
   const email=s.profile?.email;
   const streak=useStreak(s.workouts);
@@ -84,6 +86,7 @@ export function SocialTab({s,d,unreadMsgCount=0}){
 
 // ─── Social Sub-Page: Feed ───
 export function SocialFeed({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const emailRef=useRef(email);
   useEffect(()=>{emailRef.current=email;},[email]);
@@ -300,6 +303,7 @@ export function SocialFeed({s,d}){
 
 // ─── Social Sub-Page: Friends ───
 export function SocialFriends({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const displayName=s.profile?.firstName||email?.split("@")[0]||"You";
   const [friendsData,setFriendsData]=useState(null);
@@ -2573,6 +2577,7 @@ export function SocialCompare({s}){
 
 // ─── Social Sub-Page: Leaderboard ───
 export function SocialLeaderboard({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const [mode,setMode]=useState("group"); // group | friends
   const [metric,setMetric]=useState("streak"); // streak | volume | workouts | big3 | duels
@@ -2882,6 +2887,7 @@ export function SocialLeaderboard({s,d}){
 
 // ─── Social Sub-Page: Challenges (kept from SocialHub) ───
 export function SocialChallenges({s,d}){
+  const { isDesktop } = useLayout();
   const streak=useStreak(s.workouts);
   const getBest=(id)=>{let b=0;s.workouts.forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId===id)e.sets.forEach(st=>{if(st.weight>b)b=st.weight;});}));return b;};
   const big3=getBest("bench")+getBest("squat")+getBest("deadlift");

@@ -8,6 +8,7 @@ import { Card, Btn, Field, Sheet, Chip, Stat, Progress, Skeleton, SkeletonCard, 
 import { today, ago, fmtShort, fmtFull, uid, calc1RM, calcPlates, PLATES, convW, wUnit, dUnit, isCardio, toKg, toLbs, friendDisplayName, chartCfg } from '../utils/helpers';
 import { CloudSync, SocialAPI, SYNC_URL, APP_VERSION } from '../utils/sync';
 import { Undo } from '../utils/undo';
+import { useLayout } from '../utils/responsive';
 import { ShareCard } from '../utils/share';
 import { BADGE_DEFS, calcEarnedBadges } from '../data/badges';
 import { TEMPLATES } from '../data/templates';
@@ -17,6 +18,7 @@ import { AuthToken } from '../utils/auth';
 import { calcReadiness, useStreak, usePRs, useNutritionStreak } from '../components/dialogs';
 
 export function OneRMCalc({units}){
+  const { isDesktop } = useLayout();
   const [w,setW]=useState("");
   const [r,setR]=useState("");
   const e1rm=w&&r?calc1RM(parseFloat(w),parseInt(r)):0;
@@ -1412,6 +1414,7 @@ export const MUSCLE_LABELS={chest:"Chest",back:"Back",front_delts:"Front Delts",
 // ─── Progressive Overload Engine (Enhanced) ───
 
 export function GoalEngine({s,d}){
+  const { isDesktop } = useLayout();
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({type:"weight",target:"",deadline:"",label:""});
 
@@ -1581,6 +1584,7 @@ export function GoalEngine({s,d}){
 
 // ─── #1 Adaptive Program Builder ───
 export function AdaptiveCoach({s}){
+  const { isDesktop } = useLayout();
   const r=useMemo(()=>calcReadiness(s),[s.workouts,s.nutrition,s.checkins,s.goals]);
   const dow=new Date().getDay();
   const todayType=s.schedule?.overrides?.[today()]||s.schedule?.weekly?.[dow]||"Rest";
@@ -2905,6 +2909,7 @@ export const PROGRAMS=[
 ];
 
 export function ProgramMarketplace({s,d}){
+  const { isDesktop } = useLayout();
   const [sel,setSel]=useState(null);
   const apply=(prog)=>{
     const weekly={};
@@ -3213,6 +3218,7 @@ export function PhotoCompare({s}){
 
 // ─── AI Coach Chat (Claude API — BYOK + Free Tier) ───
 export function AICoachChat({s}){
+  const { isDesktop } = useLayout();
   const [userKey,setUserKey]=useState(null);
   const [keyLoaded,setKeyLoaded]=useState(false);
   // Load API key from encrypted storage on mount

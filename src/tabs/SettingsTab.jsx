@@ -503,6 +503,7 @@ export function SettingsTab({s,d,isAdmin}){
           </table>
         </div>
       </Row>
+      </div>
 
       {/* Backup — expandable */}
       <div style={{gridColumn:isDesktop?"1 / -1":undefined}}>
