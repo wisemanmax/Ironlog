@@ -1,11 +1,16 @@
 import React from 'react';
 import { V } from '../utils/theme';
 import { Icons } from '../components/Icons';
+import { useLayout } from '../utils/responsive';
 
 export function LogHub({s,d}){
+  const { isDesktop, isTablet } = useLayout();
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{fontSize:20,fontWeight:800,color:V.text,marginBottom:4}}>What are you logging?</div>
+    <div style={{display:isDesktop?"grid":"flex",flexDirection:"column",gap:14,
+      ...(isDesktop?{gridTemplateColumns:"1fr 1fr 1fr",maxWidth:1200}:{})}}>
+      <div style={{fontSize:20,fontWeight:800,color:V.text,marginBottom:4,
+        ...(isDesktop?{gridColumn:"1 / -1"}:{})
+      }}>What are you logging?</div>
 
       {[
         {id:"log_workout",icon:Icons.dumbbell,label:"Workout",desc:"Log sets, reps, weight & RPE",color:V.accent,
@@ -37,11 +42,12 @@ export function LogHub({s,d}){
 }
 
 export function SectionGrid({title,items,d}){
+  const { isDesktop, isTablet } = useLayout();
   return(
     <div>
       <div style={{fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".08em",
         marginBottom:8,paddingLeft:2}}>{title}</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:isDesktop?"1fr 1fr 1fr 1fr":isTablet?"1fr 1fr 1fr":"1fr 1fr",gap:8}}>
         {items.map(item=>(
           <button key={item.id} onClick={()=>d({type:"TAB",tab:item.id})} style={{
             display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,padding:14,
