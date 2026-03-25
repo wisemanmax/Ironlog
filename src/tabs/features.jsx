@@ -84,6 +84,7 @@ export function compressImage(file,maxDim=800,quality=0.7){
 }
 
 export function ProgressPhotos({s,d}){
+  const { isDesktop } = useLayout();
   const fileRef=useRef(null);
   const [compressing,setCompressing]=useState(false);
   const [vaultLocked,setVaultLocked]=useState(true);
@@ -1904,6 +1905,7 @@ export function WorkoutCard({workout,s}){
 
 // ─── #6 Form Check Workflow ───
 export function FormCheckTab({s,d}){
+  const { isDesktop } = useLayout();
   const [selEx,setSelEx]=useState(null);
   const [recording,setRecording]=useState(false);
   const [videoUrl,setVideoUrl]=useState(null);
@@ -2096,6 +2098,7 @@ export function useDataGuard(s){
 }
 
 export function DataGuardTab({s,d}){
+  const { isDesktop } = useLayout();
   const warnings=useDataGuard(s);
   const sevColor={high:V.danger,med:V.warn,low:V.text3};
   const sevLabel={high:"Critical",med:"Warning",low:"Info"};
@@ -2142,6 +2145,7 @@ export function DataGuardTab({s,d}){
 
 // ─── #2 Phase/Cycle Tracking ───
 export function PhaseTracker({s,d}){
+  const { isDesktop } = useLayout();
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({type:"cut",start:today(),end:"",notes:""});
   const phases=s.phases||[];
@@ -2307,6 +2311,7 @@ export const EXERCISE_SUBS={
 };
 
 export function SubstitutionFinder({s}){
+  const { isDesktop } = useLayout();
   const [selEx,setSelEx]=useState(null);
   const subs=selEx?EXERCISE_SUBS[selEx]||[]:[];
   // Also suggest same-category exercises
@@ -2384,6 +2389,7 @@ export const JOINT_MAP={
 };
 
 export function InjuryManager({s,d}){
+  const { isDesktop } = useLayout();
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({joint:"",severity:"moderate",notes:""});
   const injuries=s.injuries||[];
@@ -2512,6 +2518,7 @@ export function InjuryManager({s,d}){
 
 // ─── #6 Coach Summary Report ───
 export function WeeklySummary({s}){
+  const { isDesktop } = useLayout();
   const canvasRef=useRef(null);
   const [generated,setGenerated]=useState(false);
 
@@ -2683,6 +2690,7 @@ export const FF_BRANDS={
 };
 
 export function FastFoodHacks({s,d}){
+  const { isDesktop } = useLayout();
   const [search,setSearch]=useState("");
   const [brand,setBrand]=useState("All");
   const [sort,setSort]=useState("cal"); // cal, protein, name
@@ -2815,6 +2823,7 @@ export function FastFoodHacks({s,d}){
 
 // ─── Meal Plan Generator ───
 export function MealPlanGenerator({s}){
+  const { isDesktop } = useLayout();
   const [plan,setPlan]=useState(null);
   const goals=s.goals||{cal:2400,protein:180,carbs:250,fat:70};
   // Categorize foods by meal type
@@ -2967,6 +2976,7 @@ export function ProgramMarketplace({s,d}){
 export const DEFAULT_SUPPS=["Creatine (5g)","Protein Shake","Multivitamin","Fish Oil","Vitamin D","Pre-Workout","Magnesium","Zinc"];
 
 export function SupplementTracker({s,d}){
+  const { isDesktop } = useLayout();
   const [supps,setSupps]=useState(()=>{ const raw=LS.get("ft-supplements"); return Array.isArray(raw)?raw:DEFAULT_SUPPS.slice(0,4); });
   const [checked,setChecked]=useState(LS.get(`ft-supps-${today()}`)||{});
   const [newSupp,setNewSupp]=useState("");
@@ -3034,6 +3044,7 @@ export function SupplementTracker({s,d}){
 // ─── Photo Comparison Slider ───
 // ─── Personal Records Page ───
 export function PersonalRecords({s}){
+  const { isDesktop } = useLayout();
   const prs=useMemo(()=>{
     const map={};
     s.workouts.forEach(w=>w.exercises.forEach(ex=>{
@@ -3137,6 +3148,7 @@ export function PersonalRecords({s}){
 }
 
 export function PhotoCompare({s}){
+  const { isDesktop } = useLayout();
   const photos=(s.photos||[]).filter(p=>!p.private&&p.data).sort((a,b)=>a.date.localeCompare(b.date));
   const [leftIdx,setLeftIdx]=useState(0);
   const [rightIdx,setRightIdx]=useState(Math.max(0,photos.length-1));

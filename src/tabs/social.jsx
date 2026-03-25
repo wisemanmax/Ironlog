@@ -858,6 +858,7 @@ export function SocialFriends({s,d}){
 //  MESSAGES TAB — iMessage-style DM inbox + full chat view
 // ═══════════════════════════════════════════════════════════
 export function MessagesTab({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const displayName=s.profile?.firstName||email?.split("@")[0]||"You";
   const [friends,setFriends]=useState(null);
@@ -1626,6 +1627,7 @@ export function IMConversation({s,email,displayName,friend,onBack}){
 // ─── Social Sub-Page: Groups ───
 // ─── Social Sub-Page: Groups (with tabs) ───
 export function SocialGroups({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const displayName=s.profile?.firstName||email?.split("@")[0]||"You";
   const [groups,setGroups]=useState(null);
@@ -1989,6 +1991,7 @@ export function SocialGroups({s,d}){
 
 // ─── Social Sub-Page: Profile ───
 export function SocialProfile({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;const defaultUn=email?.split("@")[0]||"athlete";
   const [username,setUsername]=useState(LS.get("ft-username")||defaultUn);
   const [editingUn,setEditingUn]=useState(false);
@@ -2274,6 +2277,7 @@ export function SocialProfile({s,d}){
 
 // ─── Social Sub-Page: Badges ───
 export function SocialBadges({s}){
+  const { isDesktop } = useLayout();
   const {checks,dates}=useMemo(()=>calcEarnedBadges(s),[s.workouts,s.nutrition,s.photos,s.checkins,s.body]);
   const [catFilter,setCatFilter]=useState("All");
   const cats=["All",...new Set(BADGE_DEFS.map(b=>b.cat))];
@@ -2354,6 +2358,7 @@ export function SocialBadges({s}){
 
 // ─── Social Sub-Page: Notifications ───
 export function SocialNotifications({s,d}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const [notifs,setNotifs]=useState(null);
   const [filter,setFilter]=useState("unread");
@@ -2495,6 +2500,7 @@ export function SocialNotifications({s,d}){
 
 // ─── Social Sub-Page: Compare (You vs Best) ───
 export function SocialCompare({s}){
+  const { isDesktop } = useLayout();
   const getBest=(id)=>{let b=0;(s.workouts||[]).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId===id)e.sets.forEach(st=>{const wt=parseFloat(st.weight)||0;if(wt>b)b=wt;});}));return b;};
   const e1rmBest=(id)=>{let b=0;(s.workouts||[]).forEach(w=>w.exercises.forEach(e=>{if(e.exerciseId===id)e.sets.forEach(st=>{const e1rm=calc1RM(parseFloat(st.weight)||0,parseInt(st.reps)||0);if(e1rm>b)b=e1rm;});}));return b;};
   const weekW=s.workouts.filter(w=>w.date>=ago(7)).length;

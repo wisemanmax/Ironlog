@@ -400,6 +400,7 @@ export function checkAndAwardMissions(s,dispatch){
 
 // ── Daily Missions Card (shown on Home + Social Feed) ──
 export function DailyMissionsCard({s,d,compact}){
+  const { isDesktop } = useLayout();
   const [missions,setMissions]=useState(()=>getMissionStatus(s));
   // Refresh status whenever s changes
   useEffect(()=>setMissions(getMissionStatus(s)),[s.workouts,s.nutrition,s.checkins,s.body,s.photos]);

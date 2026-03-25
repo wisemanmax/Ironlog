@@ -453,6 +453,7 @@ function AdminPush({s,d}){
 // ADMIN USER AUDIT — see exactly what any user sees
 // ═══════════════════════════════════════════════════
 function AdminUserAudit({s}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const token=LS.get("ft-session-token");
   const af=async(action,extra={})=>{try{const r=await fetch(`${SYNC_URL}/api/admin`,{method:"POST",
@@ -884,6 +885,7 @@ function AdminUserAudit({s}){
 // ═══════════════════════════════════════════════════════
 // ─── Admin XP & Rank Manager ───
 function AdminXPManager({s}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   // Read token fresh on every call so stale closure never causes 401
   const af=async(action,extra={})=>{
@@ -1420,6 +1422,7 @@ function generateMockData(scale){
 
 // ─── Admin Business Value Dashboard ───
 function AdminBusinessValue({s}){
+  const { isDesktop } = useLayout();
   const email=s.profile?.email;
   const af=async(action,extra={})=>{
     const token=LS.get("ft-session-token");
