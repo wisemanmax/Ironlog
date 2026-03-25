@@ -23,6 +23,8 @@ export function Onboarding({d}){
   const [accountPin,setAccountPin]=useState("");
   const [confirmPin,setConfirmPin]=useState("");
   const [pinError,setPinError]=useState("");
+  const signupPayloadRef=useRef(null);
+  const signupCreatedRef=useRef(false);
   const [primaryGoal,setPrimaryGoal]=useState("");
   const [profile,setProfile]=useState({
     firstName:"",lastName:"",nickname:"",email:"",dob:"",sex:"",state:"",city:"",zipCode:"",
@@ -92,7 +94,7 @@ export function Onboarding({d}){
     };
 
     // Send to backend (non-blocking — app works regardless)
-    await sendToBackend(payload);
+    const userCreated=await sendToBackend(payload);
 
     // Apply to local state
     d({type:"UNITS",u:units});
@@ -104,13 +106,17 @@ export function Onboarding({d}){
     // Init auth key for this device
     AuthToken.init(profile.email);
     LS.set("ft-device-id",payload.deviceId);
+    signupPayloadRef.current=payload;
+    signupCreatedRef.current=userCreated;
     // Create server-issued session token
     await SessionManager.create(profile.email,accountPin,payload.deviceId);
     // Send email verification code then show verify screen
-    try{
-      await fetchWithTimeout(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({action:"send_verify_code",email:profile.email})});
-    }catch(e){}
+    if(userCreated){
+      const result=await sendVerifyCode(profile.email);
+      if(!result.success) setVerifyError(result.error||"Could not send verification code. Tap Resend to try again.");
+    }else{
+      setVerifyError("Account sync pending — tap Resend once you have connectivity.");
+    }
     }finally{
     setVerifyStep("pending");
     setSending(false);
@@ -225,11 +231,17 @@ export function Onboarding({d}){
   const [verifyError,setVerifyError]=useState("");
   const [verifyCooldown,setVerifyCooldown]=useState(0);
 
-  const verifySendCode=async(emailAddr)=>{
+  const sendVerifyCode=async(emailAddr)=>{
     try{
-      await fetch(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json"},
+      const res=await fetchWithTimeout(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({action:"send_verify_code",email:emailAddr||profile.email})});
-    }catch(e){}
+      if(!res.ok) return{success:false,error:`Server error (${res.status})`};
+      const json=await res.json().catch(()=>({}));
+      if(json.error) return{success:false,error:json.error};
+      return{success:true};
+    }catch(e){
+      return{success:false,error:e.name==="AbortError"?"Request timed out":"Connection failed"};
+    }
   };
 
   const verifyConfirmCode=async()=>{
@@ -252,7 +264,14 @@ export function Onboarding({d}){
 
   const verifyResend=async()=>{
     if(verifyCooldown>0)return;
-    await verifySendCode(profile.email);
+    setVerifyError("");
+    // Retry user creation if it failed during signup
+    if(!signupCreatedRef.current&&signupPayloadRef.current){
+      const created=await sendToBackend(signupPayloadRef.current);
+      if(created) signupCreatedRef.current=true;
+    }
+    const result=await sendVerifyCode(profile.email);
+    if(!result.success) setVerifyError(result.error||"Failed to send code. Try again.");
     setVerifyCooldown(60);
     const t=setInterval(()=>setVerifyCooldown(c=>{if(c<=1){clearInterval(t);return 0;}return c-1;}),1000);
   };
