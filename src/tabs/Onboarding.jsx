@@ -9,8 +9,10 @@ import { SessionManager } from '../utils/auth';
 import { SentryUtil } from '../utils/sentry';
 import { defaultExercises } from '../data/exercises';
 import { genDemo } from '../data/demo';
+import { useLayout } from '../utils/responsive';
 
 export function Onboarding({d}){
+  const { isDesktop } = useLayout();
   const [step,setStep]=useState(0);
   const [name,setName]=useState("");
   const [split,setSplit]=useState("PPL");
@@ -963,7 +965,7 @@ export function Onboarding({d}){
   ];
 
   return(
-    <div style={{height:"100%",maxWidth:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
+    <div style={{height:"100%",maxWidth:isDesktop?600:430,margin:"0 auto",background:V.bg,color:V.text,fontFamily:V.font,
       display:"flex",flexDirection:"column",padding:"0 24px",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
       <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:step<=3?"center":"flex-start",
         paddingTop:step>3?20:0,paddingBottom:40}}>

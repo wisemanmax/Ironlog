@@ -13,6 +13,7 @@ import { defaultSchedule } from '../state/reducer';
 import { genDemo } from '../data/demo';
 import { BADGE_DEFS, calcEarnedBadges } from '../data/badges';
 import { ProfileEditor, DataManager } from './features';
+import { useLayout } from '../utils/responsive';
 
 export function SystemHealthPanel({s}) {
   const [reconcile, setReconcile] = useState(() => ReconcileAPI.last());
@@ -257,6 +258,7 @@ export function SystemHealthPanel({s}) {
 //  SETTINGS TAB (More)
 // ═══════════════════════════════════════
 export function SettingsTab({s,d,isAdmin}){
+  const { isDesktop } = useLayout();
   const [goals,setGoals]=useState(s.goals);
   const [saved,setSaved]=useState(false);
   const [newEx,setNewEx]=useState("");
@@ -296,7 +298,7 @@ export function SettingsTab({s,d,isAdmin}){
   const toggle=(id)=>setOpen(o=>o===id?null:id);
 
   const Row=({id,icon,label,desc,right,children})=>(
-    <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,overflow:"hidden",marginBottom:8}}>
+    <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,overflow:"hidden",marginBottom:isDesktop?0:8}}>
       <button onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",
         width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent"}}>
         <div style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -324,7 +326,7 @@ export function SettingsTab({s,d,isAdmin}){
   const visibleSections=advancedMode?[...basicSections,...advancedSections]:basicSections;
 
   return(
-    <div style={{display:"flex",flexDirection:"column",paddingBottom:16}}>
+    <div style={{display:"flex",flexDirection:"column",paddingBottom:16,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       {/* Header + mode toggle */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <div style={{fontSize:18,fontWeight:800,color:V.text}}>Settings</div>
@@ -360,9 +362,12 @@ export function SettingsTab({s,d,isAdmin}){
         ))}
       </div>
 
+      {/* Grid container for settings sections */}
+      <div style={{display:isDesktop?"grid":"flex",gridTemplateColumns:isDesktop?"1fr 1fr":undefined,flexDirection:isDesktop?undefined:"column",gap:isDesktop?8:0}}>
+
       {/* Theme toggle */}
       <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,padding:"12px 16px",
-        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:isDesktop?0:8}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.04)",
             display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -383,7 +388,7 @@ export function SettingsTab({s,d,isAdmin}){
 
       {/* Units — inline toggle, no expand needed */}
       <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,padding:"12px 16px",
-        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:isDesktop?0:8}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.04)",
             display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -404,7 +409,7 @@ export function SettingsTab({s,d,isAdmin}){
 
       {/* Date Range — inline chips, no expand needed */}
       <div style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:14,padding:"12px 16px",
-        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:isDesktop?0:8}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.04)",
             display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -424,6 +429,7 @@ export function SettingsTab({s,d,isAdmin}){
       </div>
 
       {/* Goals — expandable */}
+      <div style={{gridColumn:isDesktop?"1 / -1":undefined}}>
       <Row id="goals" icon={Icons.target({size:16,color:V.warn})} label="Daily Goals"
         desc={`${s.goals.cal} cal · ${s.goals.protein}p · ${s.goals.carbs}c · ${s.goals.fat}f`}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -438,7 +444,9 @@ export function SettingsTab({s,d,isAdmin}){
         <Btn full onClick={saveGoals} s={{marginTop:0}}>{Icons.check({size:16,color:V.bg})} {saved?"Saved!":"Save Goals"}</Btn>
       </Row>
 
+      </div>
       {/* Custom Exercise — expandable */}
+      <div style={{gridColumn:isDesktop?"1 / -1":undefined}}>
       <Row id="exercise" icon={Icons.plus({size:16,color:V.accent})} label="Exercise Library"
         desc={`${s.exercises.length} exercises`}>
         {/* Add new exercise form */}
@@ -495,12 +503,15 @@ export function SettingsTab({s,d,isAdmin}){
           </table>
         </div>
       </Row>
+      </div>
 
       {/* Backup — expandable */}
+      <div style={{gridColumn:isDesktop?"1 / -1":undefined}}>
       <Row id="profile" icon={Icons.target({size:16,color:V.purple})} label="Edit Profile"
         desc={s.profile?.firstName?`${s.profile.firstName} ${s.profile.lastName}`:"Not set"}>
         <ProfileEditor s={s} d={d}/>
       </Row>
+      </div>
 
       <Row id="backup" icon={Icons.refresh({size:16,color:V.accent2})} label="Backup & Restore"
         desc="Export or import your data">
@@ -711,7 +722,7 @@ export function SettingsTab({s,d,isAdmin}){
       </Row>
 
       {/* Donate */}
-      <div style={{marginTop:6,padding:"16px 18px",background:"linear-gradient(135deg,rgba(34,211,238,0.06),rgba(168,85,247,0.06))",
+      <div style={{gridColumn:isDesktop?"1 / -1":undefined,marginTop:6,padding:"16px 18px",background:"linear-gradient(135deg,rgba(34,211,238,0.06),rgba(168,85,247,0.06))",
         borderRadius:14,border:`1px solid rgba(34,211,238,0.12)`,textAlign:"center"}}>
         <div style={{fontSize:14,fontWeight:700,color:V.text,marginBottom:4}}>IRONLOG is free forever</div>
         <div style={{fontSize:11,color:V.text3,lineHeight:1.5,marginBottom:12}}>
@@ -725,6 +736,8 @@ export function SettingsTab({s,d,isAdmin}){
         </a>
         <div style={{fontSize:9,color:V.text3,marginTop:8}}>marketing@wiseworldir.com</div>
       </div>
+
+      </div>{/* end grid container */}
 
       {legalView&&(
         <Sheet title={legalView==="tos"?"Terms of Service":"Privacy Policy"} onClose={()=>setLegalView(null)}

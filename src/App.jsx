@@ -32,6 +32,7 @@ import {
 } from './tabs/social';
 import { GamificationOverlay, SocialIronScore, SocialDuels, SocialWeeklyWar, SocialRivals } from './tabs/gamification';
 import { ReadinessTrend } from './components/dialogs';
+import { useLayout } from './utils/responsive';
 
 const Footer=()=>(
   <div style={{textAlign:"center",padding:"20px 0 8px",borderTop:"1px solid rgba(255,255,255,0.03)",marginTop:16}}>
@@ -48,6 +49,7 @@ const Footer=()=>(
 function App(){
   const [s,d]=useReducer(reducer,init);
   const contentRef=useRef(null);
+  const { isDesktop, isTablet, isMobile } = useLayout();
 
   // ─── Swipe Gestures — navigate between main tabs ───
   const mainTabs=["home","log","track","plan","social","settings","admin"];
@@ -700,19 +702,72 @@ function App(){
 
   return(
     <div style={{
-      height:"100%",maxWidth:430,margin:"0 auto",background:a11y.highContrast?"#000":V.bg,
+      height:"100%",maxWidth:isDesktop?"100%":430,margin:"0 auto",background:a11y.highContrast?"#000":V.bg,
       color:a11y.highContrast?"#fff":V.text,fontFamily:V.font,
       display:"flex",flexDirection:"column",position:"relative",
       fontSize:a11y.largeText?"17px":"16px",
+      marginLeft:isDesktop?220:undefined,
       ...(a11y.reduceMotion?{transition:"none"}:{}),
     }}>
+
+      {/* Desktop Sidebar Navigation */}
+      {isDesktop&&(
+        <nav style={{
+          position:"fixed",left:0,top:0,bottom:0,width:220,background:V.navBg,
+          backdropFilter:"blur(24px) saturate(180%)",borderRight:`1px solid rgba(255,255,255,0.06)`,
+          display:"flex",flexDirection:"column",padding:"24px 0",zIndex:100,overflowY:"auto",
+        }}>
+          <button onClick={()=>d({type:"TAB",tab:"home"})} style={{display:"flex",alignItems:"center",gap:10,
+            background:"none",border:"none",cursor:"pointer",padding:"12px 20px",marginBottom:20,WebkitTapHighlightColor:"transparent"}}>
+            <div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${V.accent},${V.accent2})`,
+              display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {Icons.activity({size:17,color:V.bg,strokeWidth:2.5})}
+            </div>
+            <span style={{fontSize:18,fontWeight:800,letterSpacing:"-0.03em",color:V.text}}>
+              IRON<span style={{color:V.accent}}>LOG</span>
+            </span>
+          </button>
+          {tabs.map(t=>{
+            const active=activeParent===t.id;
+            return(
+              <button key={t.id} onClick={()=>{d({type:"TAB",tab:t.id});}} style={{
+                display:"flex",alignItems:"center",gap:12,padding:"10px 20px",
+                background:active?`${V.accent}12`:"transparent",
+                border:"none",cursor:"pointer",width:"100%",
+                borderLeft:active?`3px solid ${V.accent}`:"3px solid transparent",
+                WebkitTapHighlightColor:"transparent",transition:"all .15s",
+              }}>
+                <div style={{width:22,display:"flex",justifyContent:"center"}}>
+                  {t.id==="log"?(
+                    <div style={{width:22,height:22,borderRadius:"50%",
+                      background:active?V.accent:"rgba(255,255,255,0.12)",
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {Icons.plus({size:12,color:active?V.bg:V.text3,strokeWidth:3})}
+                    </div>
+                  ):(
+                    t.icon({size:20,color:active?V.accent:V.text3,strokeWidth:active?2.2:1.6})
+                  )}
+                </div>
+                <span style={{fontSize:13,fontWeight:active?700:500,color:active?V.accent:V.text2,
+                  fontFamily:V.font}}>{t.label}</span>
+                {t.badge>0&&(
+                  <div style={{marginLeft:"auto",minWidth:18,height:18,borderRadius:9,
+                    background:V.danger,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px"}}>
+                    <span style={{fontSize:9,fontWeight:800,color:"#fff",fontFamily:V.mono}}>{t.badge>9?"9+":t.badge}</span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Status Bar Area */}
       <div style={{height:"env(safe-area-inset-top, 0px)",background:V.bg,flexShrink:0}}/>
 
       {/* Header */}
-      <div style={{padding:"12px 20px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <button onClick={()=>d({type:"TAB",tab:"home"})} style={{display:"flex",alignItems:"center",gap:8,
+      <div style={{padding:isDesktop?"12px 40px 10px":"12px 20px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        {!isDesktop&&<button onClick={()=>d({type:"TAB",tab:"home"})} style={{display:"flex",alignItems:"center",gap:8,
           background:"none",border:"none",cursor:"pointer",padding:0,WebkitTapHighlightColor:"transparent"}}>
           <div style={{width:28,height:28,borderRadius:8,background:`linear-gradient(135deg,${V.accent},${V.accent2})`,
             display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -721,7 +776,7 @@ function App(){
           <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.03em",color:V.text}}>
             IRON<span style={{color:V.accent}}>LOG</span>
           </span>
-        </button>
+        </button>}
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* Daily check-in chip */}
           {(()=>{const ciDone=(s.checkins||[]).some(c=>c.date===today());return(
@@ -926,7 +981,7 @@ function App(){
       <div ref={contentRef} role="main" aria-label="App content"
         onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
         style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",
-        WebkitOverflowScrolling:"touch",padding:"0 16px 24px",
+        WebkitOverflowScrolling:"touch",padding:isDesktop?"0 40px 24px":"0 16px 24px",
         overscrollBehavior:"contain"}}>
         {s.tab==="home"&&<HomeTab s={s} d={d}/>}
         {s.tab==="log"&&<LogHub s={s} d={d}/>}
@@ -1099,8 +1154,8 @@ function App(){
         <Footer/>
       </div>
 
-      {/* Bottom Nav — always visible, highlights parent group */}
-      <nav role="navigation" aria-label="Main navigation" style={{
+      {/* Bottom Nav — visible on mobile/tablet only */}
+      {!isDesktop&&<nav role="navigation" aria-label="Main navigation" style={{
         flexShrink:0,background:V.navBg,backdropFilter:"blur(24px) saturate(180%)",
         borderTop:`1px solid rgba(255,255,255,0.06)`,
         paddingBottom:"env(safe-area-inset-bottom, 8px)",
@@ -1144,7 +1199,7 @@ function App(){
             </button>
           );
         })}
-      </nav>
+      </nav>}
       <UndoToast d={d}/>
       <SuccessToast/>
       <GlobalConfirm/>

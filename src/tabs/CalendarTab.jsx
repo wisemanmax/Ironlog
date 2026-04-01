@@ -2,11 +2,13 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { V, Haptic } from '../utils/theme';
 import { LS } from '../utils/storage';
 import { Icons } from '../components/Icons';
+import { useLayout } from '../utils/responsive';
 import { Card, Btn, Field, Sheet, Chip, SuccessToastCtrl } from '../components/ui';
 import { today, ago, fmtShort, fmtFull } from '../utils/helpers';
 import { typeColors, WORKOUT_TYPES } from './AnalyticsTab';
 
 export function CalendarTab({s,d}){
+  const { isDesktop } = useLayout();
   const [viewDate,setViewDate]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [selDate,setSelDate]=useState(null);
   const [editWeekly,setEditWeekly]=useState(false);
@@ -107,7 +109,7 @@ export function CalendarTab({s,d}){
   const selExercises=selType?getExercisesForType(selType):[];
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       {/* Month Navigation */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <button onClick={prevMonth} aria-label="Previous month" style={{background:"none",border:"none",padding:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>

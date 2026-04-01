@@ -5,6 +5,7 @@ import { LS } from '../utils/storage';
 import { Icons } from '../components/Icons';
 import { Card, Btn, Chip, Stat, Skeleton, SkeletonCard, Progress, Sheet, Field, SuccessToastCtrl } from '../components/ui';
 import { today, ago, fmtShort, fmtFull, uid, calc1RM, convW, wUnit, dUnit, isCardio, chartCfg } from '../utils/helpers';
+import { useLayout } from '../utils/responsive';
 import { CloudSync } from '../utils/sync';
 import { ShareCard } from '../utils/share';
 import { BADGE_DEFS, calcEarnedBadges } from '../data/badges';
@@ -15,6 +16,7 @@ import { calcStrengthScore } from './AnalyticsTab';
 import { DailyMissionsCard } from './gamification';
 
 export function HomeTab({s,d}){
+  const { isDesktop, isTablet } = useLayout();
   const [shareCard,setShareCard]=useState(false);
   const td=today();
   const streak=useStreak(s.workouts);
@@ -47,13 +49,15 @@ export function HomeTab({s,d}){
   },[s.workouts,s.range]);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:14,paddingBottom:8}}>
+    <div style={{display:isDesktop?"grid":"flex",flexDirection:isDesktop?undefined:"column",gap:14,paddingBottom:8,
+      ...(isDesktop?{gridTemplateColumns:"repeat(auto-fill, minmax(340px, 1fr))"}:{})}}>
 
       {/* Today's workout done — mini exercise strip */}
       {todayW&&(
         <div style={{padding:"10px 14px",borderRadius:12,
           background:"linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.04))",
-          border:"1px solid rgba(99,102,241,0.15)"}}>
+          border:"1px solid rgba(99,102,241,0.15)",
+          ...(isDesktop?{gridColumn:"1 / -1"}:{})}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <div style={{fontSize:11,fontWeight:800,color:V.accent}}>✅ Workout logged today</div>
             <div style={{fontSize:9,color:V.text3}}>{todayW.exercises.reduce((a,e)=>a+e.sets.length,0)} sets · {todayW.dur||"?"}min</div>
@@ -72,7 +76,8 @@ export function HomeTab({s,d}){
       {!todayW&&streak>0&&new Date().getHours()>=17&&(
         <div style={{padding:"10px 14px",borderRadius:12,
           background:"linear-gradient(135deg,rgba(245,158,11,0.1),rgba(249,115,22,0.06))",
-          border:"1px solid rgba(245,158,11,0.2)",display:"flex",alignItems:"center",gap:10}}
+          border:"1px solid rgba(245,158,11,0.2)",display:"flex",alignItems:"center",gap:10,
+          ...(isDesktop?{gridColumn:"1 / -1"}:{})}}
           onClick={()=>d({type:"TAB",tab:"log_workout"})}>
           <span style={{fontSize:20}}>⚠️</span>
           <div style={{flex:1}}>
@@ -96,7 +101,8 @@ export function HomeTab({s,d}){
         return(
           <div style={{padding:"14px 16px",borderRadius:14,
             background:"linear-gradient(135deg,rgba(0,245,160,0.05),rgba(0,217,245,0.03))",
-            border:"1px solid rgba(0,245,160,0.1)"}}>
+            border:"1px solid rgba(0,245,160,0.1)",
+            ...(isDesktop?{gridColumn:"1 / -1"}:{})}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <div>
                 <div style={{fontSize:11,color:V.text3,marginBottom:2}}>{greeting}{displayName?`, ${displayName}`:""}</div>
@@ -628,7 +634,7 @@ export function HomeTab({s,d}){
 
       {/* Strength Chart — compact */}
       {strengthData.length>1&&(
-        <Card style={{padding:14}}>
+        <Card style={{padding:14,...(isDesktop?{gridColumn:"1 / -1"}:{})}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <span style={{fontSize:11,fontWeight:700,color:V.text3,textTransform:"uppercase",letterSpacing:".06em"}}>Strength</span>
             <div style={{display:"flex",gap:6}}>

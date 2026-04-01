@@ -3,6 +3,7 @@ import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cartesia
 import { V } from '../utils/theme';
 import { LS } from '../utils/storage';
 import { Icons } from '../components/Icons';
+import { useLayout } from '../utils/responsive';
 import { Card, Btn, Chip, Sheet, Stat, Progress } from '../components/ui';
 import { today, ago, fmtShort, calc1RM, convW, wUnit, isCardio, chartCfg } from '../utils/helpers';
 import { ShareCard } from '../utils/share';
@@ -119,6 +120,7 @@ export function getMuscleLabel(score){
 // ─── Volume Per Muscle Group ───
 // ─── Exercise Progression Chart ───
 export function ExerciseChart({s}){
+  const { isDesktop } = useLayout();
   const [selEx,setSelEx]=useState(s.exercises[0]?.id||"bench");
   const data=useMemo(()=>{
     const pts=[];
@@ -145,7 +147,7 @@ export function ExerciseChart({s}){
   const usedExercises=filtered.filter(e=>usedExIds.has(e.id));
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       <div style={{fontSize:16,fontWeight:800,color:V.text}}>Exercise Progression</div>
       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
         {cats.map(c=><Chip key={c} label={c} active={catF===c} onClick={()=>setCatF(c)}/>)}
@@ -195,6 +197,7 @@ export function ExerciseChart({s}){
 
 // ─── Workout Duration Trends ───
 export function DurationTrends({s}){
+  const { isDesktop } = useLayout();
   const data=useMemo(()=>{
     return s.workouts.filter(w=>w.date>=ago(s.range)&&w.dur>0).sort((a,b)=>a.date.localeCompare(b.date))
       .map(w=>({date:fmtShort(w.date),dur:w.dur,sets:w.exercises.reduce((a,e)=>a+e.sets.length,0),
@@ -208,7 +211,7 @@ export function DurationTrends({s}){
   const trend=data.length>=2?data[data.length-1].dur-data[0].dur:0;
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       <div style={{fontSize:16,fontWeight:800,color:V.text}}>Workout Duration</div>
 
       <Card style={{padding:14}}>
@@ -245,6 +248,7 @@ export function DurationTrends({s}){
 }
 
 export function VolumeTracker({s}){
+  const { isDesktop } = useLayout();
   const data=useMemo(()=>{
     const weekWorkouts=s.workouts.filter(w=>w.date>=ago(7));
     const map={};
@@ -272,7 +276,7 @@ export function VolumeTracker({s}){
   const totalSets=data.reduce((a,d)=>a+d.sets,0);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       <div style={{fontSize:16,fontWeight:800,color:V.text}}>Weekly Volume</div>
       <div style={{fontSize:10,color:V.text3}}>Sets per muscle group this week · recommended ranges shown</div>
 
@@ -312,6 +316,7 @@ export function VolumeTracker({s}){
 }
 
 export function MuscleHeatMap({s}){
+  const { isDesktop } = useLayout();
   const heat=useMemo(()=>calcMuscleHeat(s.workouts,s.exercises),[s.workouts,s.exercises]);
   const [sel,setSel]=useState(null);
   const [view,setView]=useState("front");
@@ -405,7 +410,7 @@ export function MuscleHeatMap({s}){
   },[heat,s.workouts.length]);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+    <div style={{display:"flex",flexDirection:"column",gap:10,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontSize:16,fontWeight:800,color:V.text}}>Muscle Map</div>
@@ -1014,6 +1019,7 @@ export function calcStrengthScore(workouts,bodyWeight){
 }
 
 export function StrengthScoreCard({s}){
+  const { isDesktop } = useLayout();
   const bw=s.body.find(b=>b.weight)?.weight||s.goals.goalWeight||180;
   const data=useMemo(()=>calcStrengthScore(s.workouts,bw),[s.workouts,bw]);
   const u=wUnit(s.units);
@@ -1037,7 +1043,7 @@ export function StrengthScoreCard({s}){
   const r=44,circ=2*Math.PI*r,offset=circ*(1-pct/100);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+    <div style={{display:"flex",flexDirection:"column",gap:10,maxWidth:isDesktop?900:"100%",margin:isDesktop?"0 auto":0}}>
       {/* Main Score */}
       <Card style={{padding:16,textAlign:"center"}}>
         <svg width={100} height={100} style={{display:"block",margin:"0 auto 8px"}}>
@@ -1162,6 +1168,7 @@ export function StrengthScoreCard({s}){
 // ─── #2 Goal Engine + Milestones ───
 
 export function AnalyticsTab({s}){
+  const { isDesktop } = useLayout();
   const [selEx,setSelEx]=useState("bench");
 
   const selIsCardio=isCardio(selEx,s.exercises);
@@ -1211,7 +1218,7 @@ export function AnalyticsTab({s}){
   },[s.workouts]);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:isDesktop?1200:"100%",margin:isDesktop?"0 auto":0}}>
       {/* Exercise Selector */}
       <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
